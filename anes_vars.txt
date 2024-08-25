@@ -1,0 +1,241 @@
+This file contains variables of interest in the combined 1948-2020 ANES study. The years for which the variable is available, as well as the codes corresponding to each of its categorical values, are noted next to each variable name. 
+
+********************************************************
+*>>>>>>>>>>>>>>>>DEMOGRAPHIC VARIABLES<<<<<<<<<<<<<<<<<*
+********************************************************
+
+VCF0104 RESPONDENT - GENDER
+1. Male
+2. Female
+3. Other (2016)
+
+VCF0101 RESPONDENT - AGE 					(1952-2020)
+
+VCF0105a RACE-ETHNICITY SUMMARY, 7 CATEGORIES 		(1948-2020)
+1. White non-Hispanic (1948-2012)
+2. Black non-Hispanic (1948-2012)
+3. Asian or Pacific Islander, non-Hispanic (1966-2012)
+4. American Indian or Alaska Native non-Hispanic (1966-2012) 5. Hispanic (1966-2012)
+6. Other or multiple races, non-Hispanic (1968-2012)
+7. Non-white and non-black (1948-1964)
+
+VCF0113 POLITICAL SOUTH/NONSOUTH 				(1952-2020)
+1. South
+2. Nonsouth
+
+VCF0114 RESPONDENT FAMILY - INCOME GROUP 			(1948-2020)
+1. 0 to 16 percentile
+2. 17 to 33 percentile 
+3. 34 to 67 percentile 
+4. 68 to 95 percentile 
+5. 96 to 100 percentile
+
+VCF0115 RESPONDENT - OCCUPATION GROUP 6-CATEGORY		(1952-2004)
+
+VCF0140a RESPONDENT - EDUCATION 7-CATEGORY			(1952-2020)
+1. 8 grades or less (‘grade school’)
+2. 9-12 grades (‘high school’), no diploma/equivalency; less than high school credential (2020) 3. 12 grades, diploma or equivalency
+4. 12 grades, diploma or equivalency plus non-academic training
+5. Some college, no degree; junior/community college level degree (AA degree)
+6. BA level degrees
+7. Advanced degrees incl. LLB
+
+VCF0128 RESPONDENT - RELIGION MAJOR GROUP 			(1948-2020)
+1. Protestant
+2. Catholic [Roman Catholic]
+3. Jewish
+4. Other and none (also includes DK preference)
+
+VCF0129 RESPONDENT - RELIGION FULL CODE 1960-1988,2002
+See appendix
+
+VCF0130 RESPONDENT - CHURCH ATTENDANCE 1970-2020
+1. Every week (Except 1970: almost every week) 2. Almost every week (no cases in 1970)
+3. Once or twice a month
+4. A few times a year
+5. Never (1990 and later: ‘No’ in filter) 7. No religious preference (1970-1988)
+
+VCF0131 RESPONDENT - CHURCH ATTENDANCE 1952-1968
+
+
+VCF0702 DID RESPONDENT VOTE IN THE NATIONAL ELECTIONS <<<<<< Interesting to model voter turnout
+VCF0703 REGISTER AND TURNOUT SUMMARY <<<<<< Interesting to model voter turnout
+
+
+VCF0704 VOTE FOR PRESIDENT- MAJOR CANDIDATES
+1. Democrat 2. Republican
+
+VCF0704a VOTE FOR PRESIDENT- MAJOR PARTIES
+1. Democrat
+2. Republican
+
+VCF0303 PARTY IDENTIFICATION OF RESPONDENT- SUMMARY 3- CATEGORY
+1. Democrats (including leaners) 
+2. Independents
+3. Republicans (including leaners)
+
+#use below variable to measure respondent ideology
+VCF0803 LIBERAL-CONSERVATIVE SCALE 
+1. Extremely liberal
+2. Liberal
+3. Slightly liberal
+4. Moderate, middle of the road 
+5. Slightly conservative
+6. Conservative
+7. Extremely conservative
+9. DK; haven’t thought much about it
+
+
+VCF0901a STATE CODE- FIPS
+See appendix.
+2.   Alaska
+         4.   Arizona
+         5.   Arkansas
+         6.   California
+         8.   Colorado
+         9.   Connecticut
+        10.   Delaware
+        11.   Washington DC
+        12.   Florida
+        13.   Georgia
+        15.   Hawaii
+        16.   Idaho
+        17.   Illinois
+        18.   Indiana
+        19.   Iowa
+        20.   Kansas
+        21.   Kentucky
+        22.   Louisiana
+        23.   Maine
+        24.   Maryland
+        25.   Massachusetts
+        26.   Michigan
+        27.   Minnesota
+        28.   Mississippi
+        29.   Missouri
+        30.   Montana
+        31.   Nebraska
+        32.   Nevada
+        33.   New Hampshire
+        34.   New Jersey
+        35.   New Mexico
+36. New York
+        37.   North Carolina
+        38.   North Dakota
+        39.   Ohio
+        40.   Oklahoma
+        41.   Oregon
+        42.   Pennsylvania
+        44.   Rhode Island
+        45.   South Carolina
+        46.   South Dakota
+        47.   Tennessee
+        48.   Texas
+        49.   Utah
+        50.   Vermont
+        51.   Virginia
+        53.   Washington
+        54.   West Virginia
+        55.   Wisconsin
+        56.   Wyoming
+
+VCF0901b STATE POSTAL ABBREV
+
+***************************************************
+*>>>>>>>>>>>>>>>>POLICY VARIABLES<<<<<<<<<<<<<<<<<*
+***************************************************
+
+This list of interesting policy variables is not complete. More policy variables are described in the codebook.
+
+
+#May use below variable to assess the level of racial resentment of respondents by region
+VCF0206 THERMOMETER - BLACKS
+00-96. Degrees as coded 97. 97-100 Degrees
+
+VCF0893 FEDERAL SPENDING- THE HOMELESS
+1. Increased
+2. Same
+3. Decreased or cut out entirely 8. DK
+
+VCF0892 FEDERAL SPENDING- FOREIGN AID
+1. Increased
+2. Same
+3. Decreased or cut out entirely 8. DK
+
+VCF0891 FEDERAL SPENDING- FIN AID FOR COLLEGE STUDENTS
+1. Increased
+2. Same
+3. Decreased or cut out entirely 8. DK
+
+VCF0890 FEDERAL SPENDING- PUBLIC SCHOOLS (1984-2020)
+Public schools
+1. Increased 2. Same
+ 
+VCF0888 FEDERAL SPENDING- DEALING WITH CRIME (1984-2020)
+1. Increased
+2. Same
+3. Decreased (before 2012: or cut out entirely) 8. DK
+
+VCF0879a INCREASE OR DECREASE NUMBER OF IMMIGRANTS TO U.S. 4-CATEGORY
+1. Increased
+3. Same as now 5. Decreased
+8. DK
+
+**********************************************************
+*>>>>>>>>>>>>>>>>MISCELLANEOUS VARIABLES<<<<<<<<<<<<<<<<<*
+**********************************************************
+
+VCF0050b RESPONDENT LEVEL OF POLITICAL INFO - POST
+1. Very high 2. Fairly high 3. Average 4. Fairly low 5. Very low
+
+VCF0834 WOMEN EQUAL ROLE SCALE
+1. Women and men should have an equal role 2.
+3.
+4.
+5.
+6.
+7. Women’s place is in the home
+9. DK; haven’t thought much about it
+
+VCF0838 BY LAW, WHEN SHOULD ABORTION BE ALLOWED
+1. By law, abortion should never be permitted.
+2. The law should permit abortion only in case of rape, incest, or when the woman’s life is in danger.
+3. The law should permit abortion for reasons other than rape, incest, or danger to the woman’s life, but only after the need for the abortion has
+been clearly established.
+4. By law, a woman should always be able to obtain an abortion as a matter of personal choice.
+9. DK; other
+
+ SCHOOL BUSING SCALE
+1. Bus to achieve integration 
+2.
+3.
+4.
+5.
+6.
+7. Keep children in neighborhood schools
+
+VCF0140 RESPONDENT - EDUCATION 6-CATEGORY
+1. 8 grades or less (‘grade school’)
+2. 9-12 grades (‘high school’), no diploma/equivalency; less than high school credential (2020) 3. 12 grades, diploma or equivalency
+4. 12 grades, diploma or equivalency plus non-academic training
+5. Some college, no degree; junior/community college level degree (AA degree)
+6. BA level degrees; advanced degrees incl. LLB
+
+VCF0140a RESPONDENT - EDUCATION 7-CATEGORY
+1. 8 grades or less (‘grade school’)
+2. 9-12 grades (‘high school’), no diploma/equivalency; less than high school credential (2020) 3. 12 grades, diploma or equivalency
+4. 12 grades, diploma or equivalency plus non-academic training
+5. Some college, no degree; junior/community college level degree (AA degree)
+6. BA level degrees
+7. Advanced degrees incl. LLB
+
+VCF0110 RESPONDENT - EDUCATION 4-CATEGORY			(1948-2020)
+1. Grade school or less (0-8 grades); 2020: less than high school credential 2. High school (12 grades or fewer, incl. non-college training if applicable) 3. Some college (13 grades or more but no degree;
+1948 ONLY: college, no identification of degree status)
+4. College or advanced degree (no cases 1948)
+
+VCF0227 THERMOMETER - ASIAN-AMERICANS (1992-2020)
+
+VCF0450 APPROVE OF PRESIDENT PERFORMANCE
+
+-----------------------------------------------------------------------------------------------
