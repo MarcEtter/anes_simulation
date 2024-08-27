@@ -4,6 +4,8 @@ import statsmodels.formula.api as smf
 from code_to_category import *
 
 anes = pd.read_csv('anes_select.csv')
+#Use regression incumbent-nonincumbent version of regression data to see if that changes the results 
+#regress_data_inc = pd.read_csv('')
 regress_data = pd.read_csv('regression_data_altered.csv')
 regress_data = regress_data[['year',
                              'state',
@@ -21,71 +23,100 @@ regress_data['fips'] = regress_data['state'].apply(lambda x: code_to_category(x,
 
 regress_data = regress_data.set_index(['year','fips'])
 anes = anes.set_index(['year', 'fips'])
-anes_2020 = anes.join(regress_data,['year','fips'])
-anes_2020 = anes_2020.reset_index()
+anes = anes.join(regress_data,['year','fips'])
+anes = anes.reset_index()
 
-anes_2020 = anes_2020[(anes_2020['year'] % 4 == 0)]
-anes_2020 = anes_2020[anes_2020['year'] <= 2012]
+anes = anes[(anes['year'] % 4 == 0)]
+anes = anes[anes['year'] <= 2012]
 # delete all rows with zeroes indicating missing data
-anes_2020 = anes_2020[(anes_2020[:] != 0 ).all(axis=1)]
+anes = anes[(anes[:] != 0 ).all(axis=1)]
 # drop 'neither' responses for gender (only for 2016)
-anes_2020 = anes_2020[anes_2020['gender'] != 3] 
-anes_2020 = anes_2020[anes_2020['ideology'] != 9]
-anes_2020 = anes_2020[anes_2020['vote'] != 3]
+anes = anes[anes['gender'] != 3] 
+anes = anes[anes['ideology'] != 9]
+anes = anes[anes['vote'] != 3]
 
-anes_2020['state'] = anes_2020['fips'].apply(lambda x: code_to_category(x,state_name))
-anes_2020['education'] = anes_2020['education'].apply(lambda x: code_to_category(x,educ_category))
-anes_2020['race'] = anes_2020['race'].apply(lambda x: code_to_category(x,race_category))
-dem_diff = anes_2020['spliced_BPHI_dem'] + 3.5 - anes_2020['ideology']
-gop_diff = anes_2020['spliced_BPHI_gop'] + 3.5 - anes_2020['ideology']
-anes_2020['diff_diff'] = abs(dem_diff) - abs(gop_diff)
-#anes_2020['dem_diff'] = dem_diff
+anes['state'] = anes['fips'].apply(lambda x: code_to_category(x,state_name))
+anes['education'] = anes['education'].apply(lambda x: code_to_category(x,educ_category))
+anes['race'] = anes['race'].apply(lambda x: code_to_category(x,race_category))
+dem_diff = anes['spliced_BPHI_dem'] + 3.5 - anes['ideology']
+gop_diff = anes['spliced_BPHI_gop'] + 3.5 - anes['ideology']
+anes['diff_diff'] = abs(dem_diff) - abs(gop_diff)
 
 #logistic regression requires unit interval; 0: DEM, 1: GOP
-anes_2020['incumbency'] = anes_2020['year'].apply(lambda x: code_to_category(x,incumbent))
-anes_2020['vote'] = anes_2020['vote'] - 1
+anes['incumbency'] = anes['year'].apply(lambda x: code_to_category(x,incumbent))
+anes['vote'] = anes['vote'] - 1
 #invert direction of fundamentals when Democrats are in office, to assess the effects of fundamentals on the incumbent
 for var in economics:
-    anes_2020[var] = anes_2020[var] * anes_2020['incumbency']
+    anes[var] = anes[var] * anes['incumbency']
 
-#variable for ideological distance from candidates
-#incumbency + diff_diff + age + education + race + lean_prev + rdi_yr_to_election + inflation_yoy
-results = smf.logit('vote ~ incumbency + diff_diff + age + education + race + lean_prev + rdi_yr_to_election + inflation_yoy', data = anes_2020).fit()
-anes_2020['pred_vote_prob'] = results.predict(anes_2020)
-anes_2020['pred_vote'] = anes_2020['pred_vote_prob'].apply(lambda x: round(x))
-anes_2020['correct'] = anes_2020['pred_vote'] == anes_2020['vote']
-anes_2020['correct'] = anes_2020['correct'].apply(lambda x: 1 if x==True else 0)
+def predict_vote(df):
+    df['pred_vote'] = df['pred_vote_prob'].apply(lambda x: round(x))
+    df['correct'] = df['pred_vote'] == df['vote']
+    df['correct'] = df['correct'].apply(lambda x: 1 if x==True else 0)
+    return df
 
-print(results.summary())
-dem_share = np.sum(anes_2020['pred_vote_prob']*anes_2020['weight1']) / np.sum(anes_2020['weight1'])
-survey_dem_share = np.sum(anes_2020['vote']*anes_2020['weight1']) / np.sum(anes_2020['weight1'])
+def append_accuracy(df, summary):
+    dem_share = np.sum(df['pred_vote_prob']*df['weight1']) / np.sum(df['weight1'])
+    survey_dem_share = np.sum(df['vote']*df['weight1']) / np.sum(df['weight1'])
 
-accuracy = np.mean(anes_2020['correct'])*100
-print(f'{"Observations correctly predicted:": <40}{accuracy:2.2f}%')
-print(f'{"Republican predicted vote share:": <40}{dem_share*100:2.2f}%')
-print(f'{"Republican vote share (survey):": <40}{survey_dem_share*100:2.2f}%')
-anes_2020.to_csv('predicted_votes.csv')
+    accuracy = np.mean(df['correct'])*100
+    summary['accuracy'] += f'|{YEAR: <6}|{accuracy :<39 :2.2f}%|{dem_share*100 :<39 :2.2f}%|{survey_dem_share*100 :<39 :2.2f}%\n'
+    return summary
+
+def append_coeffs(model, summary):
+    summary['coefficients'] += f'|{YEAR: <6}|'
+    for coeff in model.coeffs[1:]:
+        summary['coefficients'] += f'{coeff :<10 :2.3f}|'
+    coefficient_table += '\n'
+    return summary
+
+def print_accuracy(summary):
+    print(f'|{"Year" : <6}|{"Accuracy:": <40}|{"Republican pred vote:": <40}|{"Republican vote (survey):": <40}')
+    print(summary['demographics'])
+
+def print_coeffs(summary):
+    print(f'placeholder')
+    print(summary['coeffs'])
+
+df_fundamentals = anes
+summary_fundamentals = {'accuracy': '', 'coefficients': ''}
+str_fundamentals = 'vote ~ diff_diff + lean_prev + rdi_yr_to_election + inflation'
+model_fundamentals = smf.logit(str_fundamentals, data = df_fundamentals).fit()
+df_fundamentals['pred_vote_prob'] = model_fundamentals.predict(df_fundamentals)
+df_fundamentals = predict_vote(df_fundamentals)
+summary_fundamentals = append_accuracy(df_fundamentals, summary_fundamentals)
+summary_fundamentals = append_coeffs(df_fundamentals, summary_fundamentals)
+
+for YEAR in range(1948,2020,4):
+    #Experiment with dividing prediction model into two parts: one to predict the effect of economic fundamentals and ideological factors,
+    #the other to predict rapidly changing coefficients of race and education -- the predictions of these two models will be averaged
+    df_demographics = anes[anes['year'] == YEAR - 4]
+    str_demographics = 'vote ~ age + education + race'
+    summary_demographics = {'accuracy': '', 'coefficients': ''}
+    summary_combined = {'accuracy': '', 'coefficients': ''}
+
+    model_demographics = smf.logit(str_demographics, data = df_demographics).fit()
+    df_demographics['pred_vote_prob'] = model_demographics.predict(df_demographics)
+    df_demographics = predict_vote(df_demographics)
+    summary_demographics = append_accuracy(df_demographics, summary_demographics)
+    summary_demographics = append_coeffs(model_demographics, summary_demographics)
+
+    df_averaged = df_fundamentals.join(df_demographics)
+    df_averaged['pred_vote_prob'] = np.average(df_fundamentals['pred_vote_prob'], df_demographics['pred_vote_prob'])
+    df_averaged = predict_vote(df_averaged)
+    summary_combined = append_accuracy(df_demographics, summary_combined)#no summary demographics
+
+section = '-'
+print(section*40)
+print_accuracy(summary_fundamentals)
+print(section*40)
+print_coeffs(summary_fundamentals)
+print(section*40)
+print_accuracy(summary_demographics)
+print(section*40)
+print_coeffs(summary_demographics)
+print(section*40)
+print_accuracy(summary_combined)
 
 #set own parameters
 #results.params[:] = 0 
-
-
-
-### WHAT HAPPENS WHEN I CHANGE THE IDEOLOGICAL POSITION?
-#suppose all democratic candidates move one point to the left (below)
-dem_diff = anes_2020['spliced_BPHI_dem'] + 2.5 - anes_2020['ideology']
-gop_diff = anes_2020['spliced_BPHI_gop'] + 3.5 - anes_2020['ideology']
-anes_2020['diff_diff'] = abs(dem_diff) - abs(gop_diff)
-anes_2020['pred_vote_prob'] = results.predict(anes_2020)
-anes_2020['pred_vote'] = anes_2020['pred_vote_prob'].apply(lambda x: round(x))
-anes_2020['correct'] = anes_2020['pred_vote'] == anes_2020['vote']
-anes_2020['correct'] = anes_2020['correct'].apply(lambda x: 1 if x==True else 0)
-
-dem_share = np.sum(anes_2020['pred_vote_prob']*anes_2020['weight1']) / np.sum(anes_2020['weight1'])
-survey_dem_share = np.sum(anes_2020['vote']*anes_2020['weight1']) / np.sum(anes_2020['weight1'])
-
-accuracy = np.mean(anes_2020['correct'])*100
-print(f'{"Observations correctly predicted:": <40}{accuracy:2.2f}%')
-print(f'{"Republican predicted vote share:": <40}{dem_share*100:2.2f}%')
-print(f'{"Republican vote share (survey):": <40}{survey_dem_share*100:2.2f}%')
-anes_2020.to_csv('predicted_votes.csv')
