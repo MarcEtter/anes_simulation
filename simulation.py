@@ -10,6 +10,7 @@ YEAR = 0
 YEAR_WIDTH = 6
 FIELD_WIDTH = 15
 MODEL = 'ols'
+START_YEAR = 1948
 
 ##Pre-process data from anes csv
 anes = pd.read_csv('anes_select.csv')
@@ -26,9 +27,19 @@ regress_data = regress_data[['year',
                              'hlean_prev2',
                              'hlean_prev',
                              'spliced_BPHI_dem',
-                             'spliced_BPHI_gop']]
+                             'spliced_BPHI_gop',
+                             'unemployment']]
+"""
+df_inc = pd.DataFrame(incumbent, index = incumbent.keys())
+df_inc = df_inc.transpose()[START_YEAR]
+df_inc = df_inc.to_frame()
+df_inc = df_inc.rename({1948:'incumbent_code'}, axis = 'columns')
+regress_data.set_index('year')
+regress_data = regress_data.join(df_inc, on='year')
+"""
+
 continuous = ['age','ideology','lean_prev','rdi_yr_to_election','inflation_yoy','diff_diff']
-economics = ['rdi_yr_to_election','rdi_election_year_change','inflation_yoy']
+economics = ['rdi_yr_to_election','rdi_election_year_change','inflation_yoy','unemployment']
 regress_data['fips'] = regress_data['state'].apply(lambda x: code_to_category(x,code_to_fips))
 
 regress_data = regress_data.set_index(['year','fips'])
@@ -58,7 +69,6 @@ anes['vote'] = anes['vote'] - 1
 #invert direction of fundamentals when Democrats are in office, to assess the effects of fundamentals on the incumbent
 for var in economics:
     anes[var] = anes[var] * anes['incumbency']
-
 #only normalize continuous variables
 for var in continuous:
     anes[var] = (anes[var] - np.mean(anes[var])) / np.std(anes[var])
@@ -85,19 +95,6 @@ def append_params(model, summary):
     summary['params'] += '\n'
     return summary
 
-"""
-def print_accuracy(summary):
-    print(f'|{"Year" : <{YEAR_WIDTH}}|{"Accuracy:": <{FIELD_WIDTH}}|{"Republican pred vote:": <{FIELD_WIDTH}}|{"Republican vote (survey):": <{FIELD_WIDTH}}|')
-    print(summary['accuracy'])
-
-def print_params(model, summary):
-    header = f'|{"Year" :<{YEAR_WIDTH}}|'
-    for param in model.params.keys():
-        header += f'{param[-FIELD_WIDTH:] if len(param) > FIELD_WIDTH else param:<{FIELD_WIDTH}}|'
-    print(header)
-    print(summary['params'])
-"""
-    
 def print_params(model = None, summary = None, title = ''):
     col_names = list(['Year'])
     [col_names.append(col) for col in list(model.params.keys())]
@@ -153,7 +150,8 @@ def append_row(table, values: list, widths: list, format_str: list):
 
 df_fundamentals = anes
 summary_fundamentals = {'accuracy': '', 'params': ''}
-str_fundamentals = 'vote ~ diff_diff + lean_prev + rdi_yr_to_election + inflation_yoy'
+#str_fundamentals = 'vote ~ diff_diff + race + education + age + gender + lean_prev + rdi_yr_to_election + inflation_yoy + incumbency'
+str_fundamentals = 'vote ~ diff_diff + rdi_yr_to_election + incumbency + lean_prev + inflation_yoy + age + education + gender + race'
 if MODEL == 'logit':
     model_fundamentals = smf.logit(str_fundamentals, data = df_fundamentals).fit()
 elif MODEL == 'ols':
@@ -163,6 +161,7 @@ df_fundamentals = predict_vote(df_fundamentals)
 summary_fundamentals = append_accuracy(df_fundamentals, summary_fundamentals)
 summary_fundamentals = append_params(model_fundamentals, summary_fundamentals)
 
+summary_fundamentals_moving = {'accuracy': ''} #predict accuracy of fundamentals regression for each election 1972-2012
 summary_demographics = {'accuracy': '', 'params': ''}
 summary_combined = {'accuracy': '', 'params': ''}
 #range starts at 1976 because there is no ideology data before 1972
@@ -174,7 +173,7 @@ for YEAR in range(1972,2020,4):
 
     df_demographics = anes[anes['year'] == YEAR]
     #df_demographics = df_demographics[(df_demographics[:] != 'no matching code').all(axis = 1)] #drop all observations without matching codes 
-    str_demographics = 'vote ~ age + education + race'
+    str_demographics = 'vote ~ diff_diff + age + education + race'
 
     convergence = False
     try:
@@ -197,17 +196,31 @@ for YEAR in range(1972,2020,4):
             df_averaged = df_fundamentals_subs
             df_averaged['pred_vote_prob'] = (df_fundamentals_subs['pred_vote_prob'] + df_demographics['pred_vote_prob']) /2
             df_averaged = predict_vote(df_averaged)
-            summary_combined = append_accuracy(df_demographics, summary_combined)#no summary demographics
+            summary_combined = append_accuracy(df_averaged, summary_combined)#no summary demographics
+
+            #use prediction fit to entire dataset 1972-2012 to each election in this period
+            df_fundamentals_moving = df_fundamentals_subs.copy()
+            df_fundamentals_moving['pred_vote_prob'] = model_fundamentals.predict(df_fundamentals_moving)
+            df_fundamentals_moving = predict_vote(df_fundamentals_moving)
+            summary_fundamentals_moving = append_accuracy(df_fundamentals_moving, summary_fundamentals_moving)
+            
         else:
             print('Error: Could not compute average of fundamentals and demographic models. Dataframes have differing length.')
 
-title = '1948-2020 Fundamentals Model Accuracy'
+title = '1972-2012 Fundamentals Model Accuracy'
 print_accuracy(summary_fundamentals, title)
-title = '1948-2020 Fundamentals Model Parameters'
+title = '1972-2012 Fundamentals Model Parameters'
 print_params(model_fundamentals, summary_fundamentals, title)
-title = 'Year - 4 Demographics Model Accuracy'
-print_accuracy(summary_demographics, title)
-title = 'Year - 4 Demographics Model Parameters'
-print_params(model_demographics, summary_demographics, title)
-title = '1972-2012 Averaged Model Parameters'
-print_accuracy(summary_combined, title)
+title = 'Time Series Fundamentals Model Accuracy By Election'
+print_accuracy(summary_fundamentals_moving, title)
+#title = 'Local Demographics Model Accuracy'
+#print_accuracy(summary_demographics, title)
+#title = 'Local Demographics Model Parameters'
+#print_params(model_demographics, summary_demographics, title)
+#title = '1972-2012 Averaged Model Parameters'
+#print_accuracy(summary_combined, title)
+
+
+
+#results = smf.ols('vote ~ age + education + race', data = anes[anes['year'] == 2004]).fit()
+#results.summary()
