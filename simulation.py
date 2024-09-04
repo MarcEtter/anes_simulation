@@ -5,7 +5,6 @@ from code_to_category import *
 import re #for format string parsing
 pd.options.mode.chained_assignment = None  # default='warn' #silence setting on copy of pandas slice warning
 
-
 YEAR = 0
 YEAR_WIDTH = 6
 FIELD_WIDTH = 15
@@ -16,9 +15,11 @@ START_YEAR = 1948
 anes = pd.read_csv('anes_select.csv')
 #Use regression incumbent-nonincumbent version of regression data to see if that changes the results 
 #regress_data_inc = pd.read_csv('')
+cand_positions = pd.read_csv('candidate_positions_unweighted.csv')
 regress_data = pd.read_csv('regression_data_altered.csv')
 regress_data = regress_data[['year',
                              'state',
+                             'dem_share',
                              'lean_prev',
                              'lean_prev2',
                              'rdi_yr_to_election',
@@ -26,29 +27,43 @@ regress_data = regress_data[['year',
                              'inflation_yoy',
                              'hlean_prev2',
                              'hlean_prev',
+                             'unemployment',
                              'spliced_BPHI_dem',
                              'spliced_BPHI_gop',
-                             'unemployment']]
-"""
-df_inc = pd.DataFrame(incumbent, index = incumbent.keys())
-df_inc = df_inc.transpose()[START_YEAR]
-df_inc = df_inc.to_frame()
-df_inc = df_inc.rename({1948:'incumbent_code'}, axis = 'columns')
-regress_data.set_index('year')
-regress_data = regress_data.join(df_inc, on='year')
-"""
-
-continuous = ['age','ideology','lean_prev','rdi_yr_to_election','inflation_yoy','diff_diff']
-economics = ['rdi_yr_to_election','rdi_election_year_change','inflation_yoy','unemployment']
+                             'inc_tenure',
+                             'inc_party_cand_approval',
+                             'inc_pres_approval',
+                             'inc_midterm_change'
+                             ]]
+continuous = ['age',
+              'ideology',
+              'lean_prev',
+              'lean_prev2',
+              'rdi_yr_to_election',
+              'inflation_yoy',
+              'diff_diff',
+              'inc_party_cand_approval',
+              'inc_midterm_change']
+economics = ['rdi_yr_to_election',
+             'rdi_election_year_change',
+             'inflation_yoy',
+             'unemployment']
+multiply_in_dir_of_incumbency = ['inc_tenure','inc_party_cand_approval', 'inc_midterm_change', 'inc_pres_approval']
 regress_data['fips'] = regress_data['state'].apply(lambda x: code_to_category(x,code_to_fips))
+
+cand_positions = cand_positions.set_index('year')
+anes = anes.join(cand_positions, on = 'year')
 
 regress_data = regress_data.set_index(['year','fips'])
 anes = anes.set_index(['year', 'fips'])
 anes = anes.join(regress_data,['year','fips'])
 anes = anes.reset_index()
+regress_data = regress_data.reset_index()
+#reset index so that we may retreive republican two party national pop. vote shares for each election
+regress_data = regress_data.set_index(['year','state'])
+
 
 anes = anes[(anes['year'] % 4 == 0)]
-anes = anes[anes['year'] <= 2012]
 # delete all rows with zeroes indicating missing data
 anes = anes[(anes[:] != 0 ).all(axis=1)]
 # drop 'neither' responses for gender (only for 2016)
@@ -59,20 +74,25 @@ anes = anes[anes['vote'] != 3]
 anes['state'] = anes['fips'].apply(lambda x: code_to_category(x,state_name))
 anes['education'] = anes['education'].apply(lambda x: code_to_category(x,educ_category))
 anes['race'] = anes['race'].apply(lambda x: code_to_category(x,race_category))
-dem_diff = anes['spliced_BPHI_dem'] + 3.5 - anes['ideology']
-gop_diff = anes['spliced_BPHI_gop'] + 3.5 - anes['ideology']
+#note: if using cohen/mcgrath spliced_BPHI figures, add 3.5; they are normalized with the political center as zero
+dem_diff = anes['spliced_BPHI_dem'] +3.5 - anes['ideology']
+gop_diff = anes['spliced_BPHI_gop'] +3.5 - anes['ideology']
+anes['diff_diff_old'] = abs(dem_diff) - abs(gop_diff)
+
+dem_diff = anes['dem_ideo'] - anes['ideology']
+gop_diff = anes['gop_ideo'] - anes['ideology']
 anes['diff_diff'] = abs(dem_diff) - abs(gop_diff)
 
 #logistic regression requires unit interval; 0: DEM, 1: GOP
 anes['incumbency'] = anes['year'].apply(lambda x: code_to_category(x,incumbent))
 anes['vote'] = anes['vote'] - 1
-#invert direction of fundamentals when Democrats are in office, to assess the effects of fundamentals on the incumbent
-for var in economics:
-    anes[var] = anes[var] * anes['incumbency']
 #only normalize continuous variables
 for var in continuous:
     anes[var] = (anes[var] - np.mean(anes[var])) / np.std(anes[var])
-
+#invert direction of fundamentals when Democrats are in office, to assess the effects of fundamentals on the incumbent
+for var in economics + multiply_in_dir_of_incumbency:
+    anes[var] = anes[var] * anes['incumbency']
+anes = anes.fillna(0)#nan variables are filled with zeroes, BUT ONLY AFTER NORMALIZING
 
 def predict_vote(df):
     df['pred_vote'] = df['pred_vote_prob'].apply(lambda x: round(x))
@@ -81,10 +101,17 @@ def predict_vote(df):
     return df
 
 def append_accuracy(df, summary):
-    dem_share = np.sum(df['pred_vote_prob']*df['weight1']) / np.sum(df['weight1'])
-    survey_dem_share = np.sum(df['vote']*df['weight1']) / np.sum(df['weight1'])
+    gop_share = np.sum(df['pred_vote_prob']*df['weight1']) / np.sum(df['weight1'])
+    survey_gop_share = np.sum(df['vote']*df['weight1']) / np.sum(df['weight1'])
+    real_gop_share = 0
+    if YEAR != 0:
+        real_gop_share = 1 - regress_data.loc[(YEAR,'USA'),'dem_share']
     accuracy = np.mean(df['correct'])
-    summary['accuracy'] += f'|{YEAR: <{YEAR_WIDTH}}|{accuracy :<{FIELD_WIDTH}.2%}|{dem_share :<{FIELD_WIDTH}.2%}|{survey_dem_share:<{FIELD_WIDTH}.2%}|\n'
+    summary['accuracy'] += f'|{YEAR: <{YEAR_WIDTH}}|{accuracy :<{FIELD_WIDTH}.2%}|{gop_share :<{FIELD_WIDTH}.2%}'
+    if YEAR != 0:
+        summary['accuracy'] += f'|{survey_gop_share:<{FIELD_WIDTH}.2%}|{real_gop_share:<{FIELD_WIDTH}.2%}|\n'
+
+    summary['error_df'][YEAR] = [gop_share, survey_gop_share, real_gop_share]
     return summary
 
 def append_params(model, summary):
@@ -104,7 +131,7 @@ def print_params(model = None, summary = None, title = ''):
     print(table)
 
 def print_accuracy(summary = None, title = ''):
-    col_names = ['Year', 'Accuracy', 'Republican pred vote', 'Republican vote (survey)']
+    col_names = ['Year', 'Accuracy', 'Republican pred vote', 'Republican vote (survey)', 'Republican vote (actual)']
     widths = list([YEAR_WIDTH])
     [widths.append(FIELD_WIDTH) for x in range(len(col_names) -1)]
     table = append_header(col_names, widths, title, summary['accuracy'])
@@ -148,10 +175,24 @@ def append_row(table, values: list, widths: list, format_str: list):
 
     return table
 
-df_fundamentals = anes
-summary_fundamentals = {'accuracy': '', 'params': ''}
-#str_fundamentals = 'vote ~ diff_diff + race + education + age + gender + lean_prev + rdi_yr_to_election + inflation_yoy + incumbency'
-str_fundamentals = 'vote ~ diff_diff + rdi_yr_to_election + incumbency + lean_prev + inflation_yoy + age + education + gender + race'
+def print_abs_error(summary):
+    error_df = pd.DataFrame(summary['error_df']).transpose()
+    error_df['diff_survey'] = abs(error_df.iloc[:,0] - error_df.iloc[:,1])
+    error_df['diff_real_vote'] = abs(error_df.iloc[:,0] - error_df.iloc[:,2])
+    results = {'diff_survey': sum(error_df['diff_survey']) / len(error_df), 
+            'diff_real_vote': sum(error_df['diff_real_vote']) / len(error_df)}
+    
+    print(f'Average Absolute Error (ANES Deviation): {results["diff_survey"] :<2.3%}')
+    print(f'Average Absolute Error (Election Result Deviation): {results["diff_real_vote"] :<2.3%}\n\n')
+
+df_fundamentals = anes[anes['year']>1968]
+#df_fundamentals = anes[anes['year']<2016]
+summary_fundamentals = {'accuracy': '', 'params': '', 'error_df': dict()}
+#various possible predictors
+#str_fundamentals = 'vote ~ diff_diff + inflation_yoy + rdi_yr_to_election + unemployment + lean_prev2 + hlean_prev2 + age + education + gender + inc_party_cand_approval'
+#most parsimonious combination of two variables
+#str_fundamentals = 'vote ~ diff_diff + inc_party_cand_approval'
+str_fundamentals = 'vote ~ diff_diff + inc_party_cand_approval' 
 if MODEL == 'logit':
     model_fundamentals = smf.logit(str_fundamentals, data = df_fundamentals).fit()
 elif MODEL == 'ols':
@@ -161,11 +202,11 @@ df_fundamentals = predict_vote(df_fundamentals)
 summary_fundamentals = append_accuracy(df_fundamentals, summary_fundamentals)
 summary_fundamentals = append_params(model_fundamentals, summary_fundamentals)
 
-summary_fundamentals_moving = {'accuracy': ''} #predict accuracy of fundamentals regression for each election 1972-2012
-summary_demographics = {'accuracy': '', 'params': ''}
-summary_combined = {'accuracy': '', 'params': ''}
+summary_fundamentals_moving = {'accuracy': '', 'error_df': dict()} #predict accuracy of fundamentals regression for each election 1972-2012
+summary_demographics = {'accuracy': '', 'params': '', 'error_df': dict()}
+summary_combined = {'accuracy': '', 'params': '', 'error_df': dict()}
 #range starts at 1976 because there is no ideology data before 1972
-for YEAR in range(1972,2020,4):
+for YEAR in range(1972,2024,4):
     #Experiment with dividing prediction model into two parts: one to predict the effect of economic fundamentals and ideological factors,
     #the other to predict rapidly changing coefficients of race and education -- the predictions of these two models will be averaged
     df_fundamentals_subs = df_fundamentals[df_fundamentals['year'] == YEAR]
@@ -207,20 +248,22 @@ for YEAR in range(1972,2020,4):
         else:
             print('Error: Could not compute average of fundamentals and demographic models. Dataframes have differing length.')
 
-title = '1972-2012 Fundamentals Model Accuracy'
+
+title = '1972-2020 Fundamentals Model Accuracy'
 print_accuracy(summary_fundamentals, title)
-title = '1972-2012 Fundamentals Model Parameters'
-print_params(model_fundamentals, summary_fundamentals, title)
+#title = '1972-2012 Fundamentals Model Parameters'
+#print_params(model_fundamentals, summary_fundamentals, title)
 title = 'Time Series Fundamentals Model Accuracy By Election'
 print_accuracy(summary_fundamentals_moving, title)
+print_abs_error(summary_fundamentals_moving)
+print('Covariates: ' + str_fundamentals + '\n')
 #title = 'Local Demographics Model Accuracy'
 #print_accuracy(summary_demographics, title)
 #title = 'Local Demographics Model Parameters'
 #print_params(model_demographics, summary_demographics, title)
-#title = '1972-2012 Averaged Model Parameters'
-#print_accuracy(summary_combined, title)
 
-
-
-#results = smf.ols('vote ~ age + education + race', data = anes[anes['year'] == 2004]).fit()
-#results.summary()
+title = '1972-2020 Averaged Model Parameters'
+print_accuracy(summary_combined, title)
+print_abs_error(summary_combined)
+print('Covariates (Election Specific Model): ' + str_demographics)
+print('Covariates (Time-Series): ' + str_fundamentals + '\n')
