@@ -185,8 +185,55 @@ VCF0879a INCREASE OR DECREASE NUMBER OF IMMIGRANTS TO U.S. 4-CATEGORY
 *>>>>>>>>>>>>>>>>MISCELLANEOUS VARIABLES<<<<<<<<<<<<<<<<<*
 **********************************************************
 
+Positions of Democratic and Republican parties on several scales are around VCF500...
+
+VCF9096 REPUBLICAN PRESIDENTIAL CAND- LIBERAL- CONSERVATIVE SCALE
+1. Extremely liberal
+2. Liberal
+3. Slightly liberal
+4. Moderate; middle of the road 5. Slightly conservative
+6. Conservative
+7. Extremely conservative
+
+VCF9088 DEMOCRATIC PRESIDENTIAL CAND- LIBERAL- CONSERVATIVE SCALE
+1. Extremely liberal
+2. Liberal
+3. Slightly liberal
+4. Moderate; middle of the road 5. Slightly conservative
+6. Conservative
+7. Extremely conservative
+
 VCF0050b RESPONDENT LEVEL OF POLITICAL INFO - POST
-1. Very high 2. Fairly high 3. Average 4. Fairly low 5. Very low
+1. Very high 
+2. Fairly high 
+3. Average 
+4. Fairly low 
+5. Very low
+
+********************************************************************************
+Variables describing the positions on the two candidates on select issues:
+For each of the below variables denoting a candidate's position on a given scale, 
+1 denotes the most liberal position and 7 denotes the most conservative position.
+
+VCF9081 DEMOCRATIC PRESIDENTIAL CAND- DEFENSE SPENDING SCALE 			(1980-2016)
+VCF9082 DEMOCRATIC PRESIDENTIAL CAND- COOPERATION WITH U.S.S.R. SCALE		(1980-1988)
+VCF9083 DEMOCRATIC PRESIDENTIAL CAND- WOMEN EQUAL ROLE SCALE			(1972-2004)
+VCF9084 DEMOCRATIC PRESIDENTIAL CAND- AID TO BLACKS SCALE				(1972-2020)
+VCF9085 DEMOCRATIC PRESIDENTIAL CAND- GOVERNMENT HEALTH INSURANCE SCALE		(1972-2020)
+VCF9086 DEMOCRATIC PRESIDENTIAL CAND- GOVERNMENT SERVICES-SPENDING SCALE		(1984-2020)
+VCF9087 DEMOCRATIC PRESIDENTIAL CAND- GUARANTEED JOBS AND LIVING SCALE		(1972-2016)
+VCF9088 DEMOCRATIC PRESIDENTIAL CAND- LIBERAL- CONSERVATIVE SCALE
+
+VCF9089 REPUBLICAN PRESIDENTIAL CAND- DEFENSE SPENDING SCALE
+VCF9090 REPUBLICAN PRESIDENTIAL CAND- COOPERATION WITH U.S.S.R. SCALE
+VCF9091 REPUBLICAN PRESIDENTIAL CAND- WOMEN EQUAL ROLE SCALE
+VCF9092 REPUBLICAN PRESIDENTIAL CAND- AID TO BLACKS SCALE
+VCF9093 REPUBLICAN PRESIDENTIAL CAND- GOVERNMENT HEALTH INSURANCE SCALE
+VCF9094 REPUBLICAN PRESIDENTIAL CAND- GOVERNMENT SERVICES-SPENDING SCALE
+VCF9095 REPUBLICAN PRESIDENTIAL CAND- GUARANTEED JOBS AND LIVING SCALE
+VCF9096 REPUBLICAN PRESIDENTIAL CAND- LIBERAL- CONSERVATIVE SCALE
+
+********************************************************************************
 
 VCF0834 WOMEN EQUAL ROLE SCALE
 1. Women and men should have an equal role 2.
@@ -204,6 +251,23 @@ VCF0838 BY LAW, WHEN SHOULD ABORTION BE ALLOWED
 been clearly established.
 4. By law, a woman should always be able to obtain an abortion as a matter of personal choice.
 9. DK; other
+
+VCF0815 SEGREGATION OR DESEGREGATION
+1. Desegregation
+2. In between
+3. Strict segregation 
+9. Don’t know
+
+VCF0827a U.S. STAND IN VIETNAM SCALE
+1. Immediate withdrawal 
+2.
+3.
+4.
+5.
+6.
+7. Complete military victory 
+8. DK
+
 
  SCHOOL BUSING SCALE
 1. Bus to achieve integration 
