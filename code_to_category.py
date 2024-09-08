@@ -183,24 +183,27 @@ code_to_fips = {
          }
 
 incumbent = {
-    1948: -1,
-    1952: -1,
+    1948: 0,
+    1952: 0,
     1956: 1, 
     1960: 1, 
-    1964: -1,
-    1968: -1, 
+    1964: 0,
+    1968: 0, 
     1972: 1,
     1976: 1, 
-    1980: -1,
+    1980: 0,
     1984: 1, 
     1988: 1, 
     1992: 1, 
-    1996: -1,
-    2000: -1,
+    1996: 0,
+    2000: 0,
     2004: 1,
     2008: 1,
-    2012: -1,
-    2016: -1,
+    2012: 0,
+    2016: 0,
     2020: 1,
-    2024: -1
+    2024: 0
 }
+
+#note: this coding only applies to the use of the incumbent dictionary above,
+#not to the coding of Democratic and Republican vote intention in the dataset

@@ -235,6 +235,20 @@ VCF9096 REPUBLICAN PRESIDENTIAL CAND- LIBERAL- CONSERVATIVE SCALE
 
 ********************************************************************************
 
+The following variables denote the respondents' own positions on the scales on which they
+rated the Democratic and Republican candidates:
+
+VCF0843 DEFENSE SPENDING SCALE
+VCF0841 COOPERATION WITH U.S.S.R. SCALE
+VCF0834 WOMEN EQUAL ROLE SCALE
+VCF0830 AID TO BLACKS SCALE
+VCF0806 GOVERNMENT HEALTH INSURANCE SCALE
+VCF0839 GOVERNMENT SERVICES-SPENDING SCALE
+VCF0809 GUARANTEED JOBS AND INCOME SCALE
+
+********************************************************************************
+
+
 VCF0834 WOMEN EQUAL ROLE SCALE
 1. Women and men should have an equal role 2.
 3.
