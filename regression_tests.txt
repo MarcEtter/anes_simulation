@@ -54,3 +54,63 @@ Average Absolute Error (Election Result Deviation): 2.167%
 
 Covariates (Election Specific Model): vote ~ diff_diff + age + education + race
 Covariates (Time-Series): vote ~ diff_diff + inc_party_cand_approval
+
+********************************************************************************
+Using no variables observed at the level of the election, the following regressions were produced:
+
+    1972-2020 Fundamentals Model Accuracy               
+________________________________________________________________________
+|Year  |Accuracy       |Republican pred|Republican vote|Republican vote|
+|      |               | vote          | (survey)      | (actual)      |
+________________________________________________________________________
+|0     |78.87%         |48.38%         
+       Time Series Fundamentals Model Accuracy By Election        
+________________________________________________________________________
+|Year  |Accuracy       |Republican pred|Republican vote|Republican vote|
+|      |               | vote          | (survey)      | (actual)      |
+________________________________________________________________________
+|1972  |75.43%         |55.69%         |65.69%         |61.78%         |
+|1976  |68.98%         |48.18%         |53.80%         |48.96%         |
+|1980  |65.27%         |44.48%         |60.00%         |55.29%         |
+|1984  |67.91%         |46.54%         |59.32%         |59.18%         |
+|1988  |70.83%         |50.02%         |55.32%         |53.90%         |
+|1992  |75.60%         |46.47%         |43.97%         |46.63%         |
+|1996  |77.95%         |49.93%         |46.09%         |45.32%         |
+|2000  |74.87%         |48.63%         |48.78%         |49.82%         |
+|2004  |78.21%         |50.53%         |51.31%         |51.31%         |
+|2008  |77.33%         |47.61%         |49.71%         |46.35%         |
+|2012  |80.26%         |51.07%         |47.36%         |48.08%         |
+|2016  |78.88%         |50.23%         |47.40%         |48.97%         |
+|2020  |86.77%         |44.49%         |44.47%         |47.79%         |
+
+Average Absolute Error (ANES Deviation): 5.011%
+Average Absolute Error (Election Result Deviation): 3.825%
+
+
+Covariates: vote ~ diff_diff
+
+               1972-2020 Averaged Model Parameters                
+________________________________________________________________________
+|Year  |Accuracy       |Republican pred|Republican vote|Republican vote|
+|      |               | vote          | (survey)      | (actual)      |
+________________________________________________________________________
+|1972  |77.16%         |60.69%         |65.69%         |61.78%         |
+|1976  |69.73%         |50.82%         |53.80%         |48.96%         |
+|1980  |66.73%         |52.24%         |60.00%         |55.29%         |
+|1984  |68.01%         |52.93%         |59.32%         |59.18%         |
+|1988  |71.18%         |52.67%         |55.32%         |53.90%         |
+|1992  |75.60%         |45.20%         |43.97%         |46.63%         |
+|1996  |78.20%         |47.69%         |46.09%         |45.32%         |
+|2000  |74.61%         |48.73%         |48.78%         |49.82%         |
+|2004  |79.05%         |51.30%         |51.31%         |51.31%         |
+|2008  |78.08%         |48.04%         |49.71%         |46.35%         |
+|2012  |80.20%         |49.01%         |47.36%         |48.08%         |
+|2016  |83.50%         |49.11%         |47.40%         |48.97%         |
+|2020  |86.77%         |44.12%         |44.47%         |47.79%         |
+
+Average Absolute Error (ANES Deviation): 2.541%
+Average Absolute Error (Election Result Deviation): 1.907%
+
+
+Covariates (Election Specific Model): vote ~ diff_diff + age + education + race
+Covariates (Time-Series): vote ~ diff_diff
