@@ -135,7 +135,7 @@ def get_vote_shares(df):
     
     for party in PARTIES:
         shares[f'{party}_share'] = shares[f'{party}_share'] / total
-        
+
     #Predict vote shares by assigning each respondent to most probable candidate
     #Note: distorts vote shares and exaggerates margin of victory
     #gop_share = np.sum(df['pred_vote']*df['weight1']) / np.sum(df['weight1'])
@@ -144,16 +144,10 @@ def get_vote_shares(df):
     return shares
 
 def append_accuracy_multi(df, summary):
-    gop_share = np.sum(df['gop_pred_vote_prob']*df['weight1']) / np.sum(df['weight1'])
-    dem_share = np.sum(df['dem_pred_vote_prob']*df['weight1']) / np.sum(df['weight1'])
-    #Below: normalize vote shares -- may result in increased error
-    total = gop_share + dem_share
-    gop_share = gop_share / total
-    dem_share = dem_share / total
-    #Predict vote shares by assigning each respondent to most probable candidate
-    #Note: distorts vote shares and exaggerates margin of victory
-    #gop_share = np.sum(df['pred_vote']*df['weight1']) / np.sum(df['weight1'])
-    #dem_share = np.sum(((df['pred_vote'] - 1) * -1)*df['weight1']) / np.sum(df['weight1'])
+    vote_shares = get_vote_shares(df)
+    gop_share = vote_shares['gop_share']
+    dem_share = vote_shares['dem_share']
+
     survey_gop_share = np.sum(df['vote']*df['weight1']) / np.sum(df['weight1'])
     real_gop_share = 0
     if YEAR != 0:
