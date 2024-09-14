@@ -2,51 +2,62 @@ from test_regression import *
 import pandas as pd
 
 ELECTION_YR = 2020
-INC_PARTY_CAND_APPROVAL = 0
-CONTINUOUS_VARS = ['ideology']
+INC_PARTY_CAND_APPROVAL = 0.44 #Harris approval rating, according to 538
+INC_PARTY = 0#Democrats 
+INC_PARTY_TENURE = 4
+RDI_YR_TO_ELECTION = 50360 / 50151 #RDI PC in Q2 2024 / RDI PC in Q2 2023 https://fred.stlouisfed.org/series/A229RX0Q048SBEA
+INFLATION_YOY = 1.0289 #CPI in July 2024 / CPI in July 2023
+
+if RUN_REGRESSIONS:#if we retabulate the data, save it to file
+    sim_df = anes.copy()
+    for key in anes.keys():
+        for party in PARTIES:
+            if party in key:
+                sim_df = sim_df.drop(key) 
+    sim_df.to_csv('simulation_data.csv')
+else:   
+    #Below df is trimmed to only necessary variables, but could leave extra variables in the simulation data csv
+    #This would permit the simulation of historical elections where specifying fundamentals above would be redundant
+    sim_df = pd.read_csv('simulation_data.csv')
 
 candidates = {
-'Harris':
+'dem':
     {
-    'party': 'Democrat',
-    'incumbent': True,
+    'party': 'dem',
+    'code': 0,
     'ideology': 2.1,
-    'expected_vote': 0.5},
+    'poll': 0.49},
 
-'Trump':
+'gop':
     {
-    'party': 'Republican',
-    'incumbent': False,
+    'party': 'gop',
+    'code': 1,
     'ideology': 5.25,
-    'expected_vote': 0.5},
+    'poll': 0.46},
 
-'Kennedy':
-    {'party': 'Independent',
-    'incumbent': False,
+'indep':
+    {'party': 'indep',
+     'code': 2,
     'ideology': 4.25,
-    'expected_vote': 0.05}
+    'poll': 0.05}
 }
 
-cand_df = pd.DataFrame(candidates)
+#TODO: change the df that gets loaded in from anes to something else, so you don't need to run test_regression.py 
+sim_df = sim_df[sim_df['year'] == ELECTION_YR]
+sim_df['inc_party_cand_approval'] = INC_PARTY_CAND_APPROVAL
+sim_df['inflation_yoy'] = INFLATION_YOY
+sim_df['inc_party'] = INC_PARTY
+sim_df['inc_party_tenure'] = INC_PARTY_TENURE
+sim_df['rdi_yr_to_election'] = RDI_YR_TO_ELECTION
+sim_df = set_parties(sim_df, candidates)
 
-for var in CONTINUOUS_VARS:
-    var_mean = CONVERSION_TABLE[f'{var}_mean']
-    var_std = CONVERSION_TABLE[f'{var}_std']
-    cand_df[var] = cand_df[var].apply(lambda x: (x - var_mean) / var_std)  
+for party in PARTIES:
+    try:
+        if party in ['dem','gop']:
+            sim_df[f'{party}_pred_vote_prob'] = model_fundamentals_dict[party].predict(sim_df)
+        else:
+            sim_df[f'{party}_pred_vote_prob'] = 0.5 * (model_fundamentals_dict['dem'].predict(sim_df) + model_fundamentals_dict['gop'].predict(sim_df))
+    except KeyError: #party may belong to neither dem nor gop
+        sim_df[f'{party}_pred_vote_prob'] = model_fundamentals_dict[party].predict(sim_df)
 
-anes_yr = anes[anes['year'] == ELECTION_YR]
-anes_yr['dem_ideo'] = cand_df['Harris']['ideology']
-anes_yr['gop_ideo'] = cand_df['Trump']['ideology']
-anes_yr['rfk_ideo'] = cand_df['Kennedy']['ideology']
-
-for candidate in cand_df.index():
-    party = cand_df[candidate]['party']
-    anes_yr[f'{party}_diff'] = abs(anes_yr['dem_ideo'] - anes_yr['ideology'])
-
-#MAKE sure to SUBTRACT REPUBLICAN from DEMOCRAT, or the measure will be reversed
-#note: in the multi-candidate case, it is not pratical to measure the difference in differences,
-#unless we wish to make n^2 comparisons, where n is the number of candidates
-anes_yr['diff_diff'] = anes['Democrat_diff'] - anes['Republican_diff']
-
-anes_yr_fundamentals = model_fundamentals.predict(anes_yr)
-anes_yr_demographics = model_demographics.predict(anes_yr) 
+print(get_vote_shares(sim_df))
