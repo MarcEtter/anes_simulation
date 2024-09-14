@@ -114,3 +114,68 @@ Average Absolute Error (Election Result Deviation): 1.907%
 
 Covariates (Election Specific Model): vote ~ diff_diff + age + education + race
 Covariates (Time-Series): vote ~ diff_diff
+
+
+
+************************************************************************************
+MODEL WITH FUNDAMENTALS AND IDEOLOGY:
+
+    1972-2020 Fundamentals Model Accuracy               
+________________________________________________________________________
+|Year  |Accuracy       |Republican pred|Republican vote|Republican vote|
+|      |               | vote          | (survey)      | (actual)      |
+________________________________________________________________________
+|0     |79.63%         |48.08%         
+       Time Series Fundamentals Model Accuracy By Election        
+________________________________________________________________________
+|Year  |Accuracy       |Republican pred|Republican vote|Republican vote|
+|      |               | vote          | (survey)      | (actual)      |
+________________________________________________________________________
+|1972  |75.43%         |65.92%         |65.69%         |61.78%         |
+|1976  |68.98%         |50.16%         |53.80%         |48.96%         |
+|1980  |65.27%         |59.63%         |60.00%         |55.29%         |
+|1984  |71.01%         |59.59%         |59.32%         |59.18%         |
+|1988  |70.83%         |54.19%         |55.32%         |53.90%         |
+|1992  |75.60%         |45.13%         |43.97%         |46.63%         |
+|1996  |77.95%         |47.94%         |46.09%         |45.32%         |
+|2000  |74.87%         |47.93%         |48.78%         |49.82%         |
+|2004  |78.21%         |54.13%         |51.31%         |51.31%         |
+|2008  |77.33%         |43.99%         |49.71%         |46.35%         |
+|2012  |80.26%         |42.69%         |47.36%         |48.08%         |
+|2016  |84.29%         |49.21%         |47.40%         |48.97%         |
+|2020  |86.77%         |43.17%         |44.47%         |47.79%         |
+
+Average Absolute Error (ANES Deviation): 1.987%
+Average Absolute Error (Election Result Deviation): 2.448%
+
+************************************************************************************
+CHANGE IN ESTIMATES AFTER ADDING POLLS TO ABOVE MODEL:
+
+|Year  |Accuracy       |Republican pred|Republican vote|Republican vote|
+|      |               | vote          | (survey)      | (actual)      |
+________________________________________________________________________
+|0     |79.63%         |48.07%         
+       Time Series Fundamentals Model Accuracy By Election        
+________________________________________________________________________
+|Year  |Accuracy       |Republican pred|Republican vote|Republican vote|
+|      |               | vote          | (survey)      | (actual)      |
+________________________________________________________________________
+|1972  |75.43%         |66.02%         |65.69%         |61.78%         |
+|1976  |68.98%         |50.49%         |53.80%         |48.96%         |
+|1980  |65.27%         |59.28%         |60.00%         |55.29%         |
+|1984  |71.01%         |60.41%         |59.32%         |59.18%         |
+|1988  |70.83%         |55.79%         |55.32%         |53.90%         |
+|1992  |75.60%         |44.71%         |43.97%         |46.63%         |
+|1996  |77.95%         |47.74%         |46.09%         |45.32%         |
+|2000  |74.87%         |50.85%         |48.78%         |49.82%         |
+|2004  |78.21%         |52.30%         |51.31%         |51.31%         |
+|2008  |77.33%         |42.22%         |49.71%         |46.35%         |
+|2012  |80.26%         |43.06%         |47.36%         |48.08%         |
+|2016  |84.29%         |48.21%         |47.40%         |48.97%         |
+|2020  |86.77%         |43.33%         |44.47%         |47.79%         |
+
+Average Absolute Error (ANES Deviation): 1.932%
+Average Absolute Error (Election Result Deviation): 2.586%
+
+
+Covariates: dem_vote ~ dem_diff + dem_poll + dem_inc_party_cand_approval + dem_inc + dem_inc_tenure + dem_rdi_yr_to_election + dem_inflation_yoy + dem_unemployment

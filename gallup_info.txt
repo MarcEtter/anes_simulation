@@ -1,0 +1,4 @@
+Gallup polling data is adjusted to measure the predicted two party vote share. Sources below:
+
+https://en.wikipedia.org/wiki/Polling_for_United_States_presidential_elections
+https://web.archive.org/web/20170630070844/http://www.gallup.com/poll/110548/gallup-presidential-election-trialheat-trends-19362004.aspx#4
