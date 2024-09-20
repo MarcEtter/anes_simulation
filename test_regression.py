@@ -8,23 +8,22 @@ from code_to_category import *
 import re #for format string parsing
 pd.options.mode.chained_assignment = None  # default='warn' #silence setting on copy of pandas slice warning
 
-YEAR = 0
 YEAR_WIDTH = 6
 FIELD_WIDTH = 15
 RUN_REGRESSIONS = False
-#when predicting elections, exclude the current election from the fundamentals regression
-#note: setting to True overwrites the existing regression models saved to .pickle that are regressed against
-#the entire set of elections 
-EXCLUDE_CURR_YR = False 
+EXCLUDE_CURR_YR = False #for measuring the out-of-sample accuracy
 REGRESSION_OBJ_PATH = os.getcwd() + '/regression_models'
+DEFAULT_REGR = f'{REGRESSION_OBJ_PATH}/dem_model_fundamentals.pickle'
+MULT_BY_POLLS = True
+CONSTRAIN_VOTE_PROB = True #constrains vote party vote probabilities of voters so they sum to 1.0
 
-DEFAULT = {}
-DEFAULT['PARTY_CODES'] = {'dem':0, 'gop':1}
-DEFAULT['PARTIES'] = list(DEFAULT['PARTY_CODES'].keys())
-DEFAULT['MODEL'] = 'logit'
-DEFAULT['START_YEAR'] = 1948
-DEFAULT['MULTI_PARTY_MODE'] = True
-DEFAULT['MULT_IN_DIR_OF_INCUMBENCY'] = [
+default = {}
+default['party_codes'] = {'dem':0, 'gop':1}
+default['parties'] = list(default['party_codes'].keys())
+default['model'] = 'logit'
+default['year'] = 1948
+default['multi_party_mode'] = True
+default['mult_in_dir_of_incumbency'] = [
 'rdi_yr_to_election',
 'rdi_election_year_change',
 'inflation_yoy',
@@ -38,6 +37,17 @@ DEFAULT['MULT_IN_DIR_OF_INCUMBENCY'] = [
 'lean_prev2',
 'hlean_prev',
 'hlean_prev2']
+
+"""
+RUN_REGRESSIONS:
+    when predicting elections, exclude the current election from the fundamentals regression
+    note: setting to True overwrites the existing regression models saved to .pickle that are regressed against
+    the entire set of elections 
+REGRESSION_OBJ_PATH:
+    regression model whose keys determine the regression covars of third parties, fix this later
+MULT_BY_POLLS:
+    multiply vote share estimates by polling estimates
+"""
 
 #This file is needed to execute functions including those to evaluate the accuracy of predictions
 path = 'regress_data.csv'
@@ -62,32 +72,79 @@ def get_vars_to_norm():
     return vars_to_normalize
 
 #function for simulation.py to set the parties in the analysis
-def set_parties(election):
-    df = election['DATAFRAME']
-    candidates = election['CANDIDATES']
+def initialize(election):
+    df = election['df']
+    candidates = election['candidates']
     #PARTY_CODES = dict(zip([x['party'] for x in candidates.values()], [x['code'] for x in candidates.values()]))
     PARTIES = list(candidates.keys())
-    
-    #cand_dict = {}
-    #for cand in candidates.values():
-    #    party = cand['party']
-    #    cand_dict[f'{party}_ideo'] = cand['ideology']
-    #    cand_dict[f'{party}_poll'] = cand['poll']
-
+    inc_str = election['inc_party']
+    df['incumbency'] = election['party_codes'][inc_str]
     for party in PARTIES:
         df[f'{party}_ideo'] = candidates[party]['ideology']
         df[f'{party}_poll'] = candidates[party]['poll']
-    
+
     df = compute_distances(election)
     df = normalize(df, get_vars_to_norm())
     df = add_party_codes_votes(election)
     df = add_party_vars(election)
 
     return df
+
+def simulate_election(election, model_fundamentals_dict):
+    sim_df = election['df']
+    for party in election['parties']:
+        #Below, we predict vote shares for parties outside the dataset by using the existing fundamentals model for party x
+        #and creating a copy of the election df and modifying colnames so they are prefixed with party x (i.e. dem)
+        #Relevant smf source code (model.py): def predict(self, exog)
+        # def _transform_predict_exog(self, exog, transform=True): model.py
+        # throwing an error as below allows prints stacktrace where smf routines are
+        #sim_df[f'{party}_pred_vote_prob'] = model_fundamentals_dict[party].predict(sim_df.transpose())
+
+        #TODO: redesign the prediction of third party vote shares so that you do not need to rename columns
+        #TODO: eliminate the ugly capitalization syntax in the ELECTION dictionary
+        if party in ['dem', 'gop']:
+            sim_df[f'{party}_pred_vote_prob'] = model_fundamentals_dict[party].predict(sim_df)
+        else:
+            temp_df = sim_df.copy()
+            party_vars = list(election['mult_in_dir_of_incumbency'].copy())
+            party_vars.append('poll')
+            party_vars.append('diff')
+            new_names = []
+            if 'dem' in DEFAULT_REGR:   
+                new_names = [f'dem_{x}' for x in party_vars]
+            elif 'gop' in DEFAULT_REGR:
+                new_names = [f'gop_{x}' for x in party_vars]
+            else:
+                print('Error: Default regression model not identified.')
+
+            names = [f'{party}_{x}' for x in party_vars]
+            temp_df = temp_df.drop(columns = new_names)#drop existing cols prefixed with dem/gop and insert new ones
+            temp_df = temp_df.rename(columns = dict(zip(names, new_names)))
+            
+            sim_df[f'{party}_pred_vote_prob'] = model_fundamentals_dict[party].predict(temp_df)
+
+    if MULT_BY_POLLS:
+        sim_df = mult_by_polls(election)
+
+    if CONSTRAIN_VOTE_PROB:
+        party_keys = [f'{party}_pred_vote_prob' for party in election['parties']]
+        sum_probs = sim_df[party_keys].sum(axis = 'columns')
+        constrained = sim_df[party_keys].apply(lambda x: x / sum_probs, axis = 'index') 
+        sim_df = sim_df.drop(party_keys, axis = 'columns')
+        sim_df = sim_df.join(constrained)
+
+    return sim_df
+
+def rake(sample, target):
+    #marginal_probs = 
+    #sample_marginal_probs = 
+
+
+    pass
     
 def compute_distances(election):
-    df = election['DATAFRAME']
-    PARTIES = election['PARTIES']
+    df = election['df']
+    PARTIES = election['parties']
     for party in PARTIES:
         df[f'{party}_diff'] = abs(df[f'{party}_ideo'] - df['ideology'])
     return df
@@ -99,9 +156,9 @@ def normalize(df, vars_to_normalize):
 #invert direction of fundamentals when Democrats are in office, to assess the effects of fundamentals on the incumbent
 
 def add_party_codes_votes(election):
-    df = election['DATAFRAME']
-    PARTIES = election['PARTIES']
-    PARTY_CODES = election['PARTY_CODES']
+    df = election['df']
+    PARTIES = election['parties']
+    PARTY_CODES = election['party_codes']
     for party in PARTIES:
         df[f'{party}_code'] = PARTY_CODES[party]
         df[f'{party}_vote'] = df['vote'] == df[f'{party}_code']
@@ -109,9 +166,9 @@ def add_party_codes_votes(election):
     return df
 
 def add_party_vars(election):
-    vars = election['MULT_IN_DIR_OF_INCUMBENCY']
-    df = election['DATAFRAME']
-    PARTIES = election['PARTIES']
+    vars = election['mult_in_dir_of_incumbency']
+    df = election['df']
+    PARTIES = election['parties']
     for var in vars:
         for party in PARTIES:
             #create column for each party denoting if it is incumbent or not
@@ -126,15 +183,39 @@ def predict_vote(df):
     df['correct'] = df['correct'].apply(lambda x: 1 if x==True else 0)
     return df
 
+def mult_by_polls(election, df = None):
+    exp_polls = 1
+    exp_model = 1
+    try:
+        if not df:
+            df = election['df']
+    except:
+        pass
+
+    for party in election['parties']:
+        #polls = np.mean(df[df['year'] == year][f'{party}_poll']) ** exp_polls
+        key = f'{party}_pred_vote_prob'
+        df[key] = (df[key]**exp_model * df[f'{party}_poll']**exp_polls) ** 1/(exp_model + exp_polls)
+        #df[key] = df[key].apply(lambda x: (x**exp_model * polls**exp_polls) ** 1/(exp_model + exp_polls))
+
+    return df
+
 def predict_vote_multi(df_fundamentals, election):
     df = df_fundamentals
-    PARTY_CODES = election['PARTY_CODES']
-    PARTIES = election['PARTIES']
+    PARTY_CODES = election['party_codes']
+    PARTIES = election['parties']
     df['sum_prob'] = 0 
+
+    if MULT_BY_POLLS:
+        df = mult_by_polls(election, df)
+
     for party in PARTIES:
         df['sum_prob'] += df[f'{party}_pred_vote_prob']
-    #for party in PARTIES:
-    #    df[f'{party}_pred_vote_prob'] = df[f'{party}_pred_vote_prob'] / df['sum_prob']
+
+    #could rewrite all for party in election['parties'] loops with apply(..., axis = 'columns') if slow
+    if CONSTRAIN_VOTE_PROB:
+        for party in PARTIES:
+            df[f'{party}_pred_vote_prob'] = df[f'{party}_pred_vote_prob'] / df['sum_prob']
 
     #retrieve the names of the parties from the df to ensure that I have the correct order of keys to index with
     df_vote_probs = df[[f'{party}_pred_vote_prob' for party in PARTIES]]
@@ -149,15 +230,22 @@ def predict_vote_multi(df_fundamentals, election):
         df[f'{party}_correct'] = df[f'{party}_correct'].apply(lambda x: 1 if x==True else 0)
     return df
 
-def get_vote_shares(df):
-    shares = {}
+def get_vote_shares(election, df = None):
+    if type(df) == pd.DataFrame:
+        pass
+    else:
+        df = election['df']
+
+    parties = election['parties']
     total = 0
-    for party in PARTIES:
+    shares = {}
+    for party in parties:
         shares[f'{party}_share'] = np.sum(df[f'{party}_pred_vote_prob']*df['weight1']) / np.sum(df['weight1'])
         total += shares[f'{party}_share']    #normalize vote shares -- may result in increased error
     
-    for party in PARTIES:
-        shares[f'{party}_share'] = shares[f'{party}_share'] / total
+    if not CONSTRAIN_VOTE_PROB:
+        for party in parties:
+            shares[f'{party}_share'] = shares[f'{party}_share'] / total
 
     #Predict vote shares by assigning each respondent to most probable candidate
     #Note: distorts vote shares and exaggerates margin of victory
@@ -166,14 +254,15 @@ def get_vote_shares(df):
 
     return shares
 
-def append_accuracy_multi(df, summary, year):
-    vote_shares = get_vote_shares(df)
+def append_accuracy_multi(df, summary, election):
+    parties = election['parties']
+    vote_shares = get_vote_shares(election, df)
     gop_share = vote_shares['gop_share']
     dem_share = vote_shares['dem_share']
 
     survey_gop_share = np.sum(df['vote']*df['weight1']) / np.sum(df['weight1'])
     real_gop_share = 0
-    YEAR = year
+    YEAR = election['year']
     if YEAR != 0:
         real_gop_share = 1 - regress_data.loc[(YEAR,'USA'),'dem_share']
     accuracy = np.mean(df['gop_correct'])
@@ -272,7 +361,7 @@ def print_abs_error(summary):
     print(f'Average Absolute Error (Election Result Deviation): {results["diff_real_vote"] :<2.3%}\n\n')
 
 def create_model_fundamentals_multi(df_fundamentals, str_fundamentals_dict, election):
-    model = election['MODEL']
+    model = election['model']
     for party in PARTIES:
         if model == 'logit':
             model_fundamentals_dict[party] = smf.logit(str_fundamentals_dict[party], data = df_fundamentals).fit()
@@ -286,7 +375,7 @@ def create_model_fundamentals_multi(df_fundamentals, str_fundamentals_dict, elec
     return df_fundamentals, model_fundamentals_dict
 
 def create_model_fundamentals(df_fundamentals, str_fundamentals, election):
-    MODEL = election['MODEL']
+    MODEL = election['model']
     if MODEL == 'logit':
         model_fundamentals = smf.logit(str_fundamentals, data = df_fundamentals).fit()
     elif MODEL == 'ols':
@@ -300,20 +389,42 @@ def load_model_fundamentals(path):
     return model_fundamentals
 
 def load_model_fundamentals_multi(path, parties):
-    PARTIES = parties
+    #function to load statsmodels for parties in dataset
+    #statsmodels for parties outside the dataset are imputed by averaging coefficients from dem and gop
+    party_remain = list(parties)
     model_fundamentals_dict = {}
-    for party in PARTIES:
-        model_fundamentals_dict[party] = sm.load(f'{path}/{party}_model_fundamentals.pickle')
+    for party in list(['dem','gop']):
+        try:
+            model_fundamentals_dict[party] = sm.load(f'{path}/{party}_model_fundamentals.pickle')
+            party_remain.remove(party)
+        except FileNotFoundError:
+            print(f'Error: {party}_model_fundamentals.pickle not found.')
+            return
+
+    dem_model = sm.load(f'{path}/dem_model_fundamentals.pickle')
+    gop_model = sm.load(f'{path}/gop_model_fundamentals.pickle')
+    match = len(gop_model.model.exog_names) == len(dem_model.model.exog_names) 
+    match = match and len(gop_model.params) == len(dem_model.params)
+    if not match:
+        return model_fundamentals_dict
+    
+    imputed_model = sm.load(DEFAULT_REGR)
+    for party in party_remain:
+        for i in range(len(dem_model.params)):  
+            imputed_model.params[i] = 0.5 * (gop_model.params[i] + dem_model.params[i])
+        
+        model_fundamentals_dict[party] = imputed_model
+                
     return model_fundamentals_dict
 
 
-MULTI_PARTY_MODE = DEFAULT['MULTI_PARTY_MODE']
-MODEL = DEFAULT['MODEL']
-PARTIES = DEFAULT['PARTIES']
+MULTI_PARTY_MODE = default['multi_party_mode']
+MODEL = default['model']
+PARTIES = default['parties']
 
 if not RUN_REGRESSIONS:
     if MULTI_PARTY_MODE:
-        model_fundamentals_dict = load_model_fundamentals_multi(REGRESSION_OBJ_PATH, DEFAULT['PARTIES'])
+        model_fundamentals_dict = load_model_fundamentals_multi(REGRESSION_OBJ_PATH, default['parties'])
     else:
         model_fundamentals = load_model_fundamentals(REGRESSION_OBJ_PATH)
 else:
@@ -376,10 +487,10 @@ else:
     gop_diff = abs(anes['spliced_BPHI_gop'] +3.5 - anes['ideology'])
     anes['diff_diff_old'] = dem_diff - gop_diff
 
-    DEFAULT['DATAFRAME'] = anes 
+    default['df'] = anes 
     #'DATAFRAME' key of DEFAULT object should point to whatever anes points to
 
-    anes = compute_distances(DEFAULT)        
+    anes = compute_distances(default)        
     anes['diff_diff'] = abs(anes['dem_diff']) - abs(anes['gop_diff'])
     #logistic regression requires unit interval; 0: DEM, 1: GOP
     anes['incumbency'] = anes['year'].apply(lambda x: code_to_category(x,incumbent))
@@ -394,11 +505,11 @@ else:
     anes = normalize(anes, vars_to_normalize)
 
     if MULTI_PARTY_MODE:
-        anes = add_party_codes_votes(DEFAULT)
-    multiply_in_dir_of_incumbency = DEFAULT['MULT_IN_DIR_OF_INCUMBENCY']
+        anes = add_party_codes_votes(default)
+    multiply_in_dir_of_incumbency = default['mult_in_dir_of_incumbency']
     for var in multiply_in_dir_of_incumbency:
         if MULTI_PARTY_MODE:
-            anes = add_party_vars(DEFAULT)
+            anes = add_party_vars(default)
         else:
             anes[var] = anes[var] * (anes['incumbency']*2 - 1)
     anes = anes.fillna(0)#nan variables are filled with zeroes, BUT ONLY AFTER NORMALIZING
@@ -418,16 +529,23 @@ else:
     for party in PARTIES:
         ##****************REGRESSION FOR MULTI-PARTY MODE, FITTED TO ENTIRE DATASET****************
         #str_fundamentals_dict[party] = f'{party}_vote ~ {party}_diff + {party}_inc_party_cand_approval + {party}_inc + {party}_inc_tenure + {party}_rdi_yr_to_election + {party}_inflation_yoy'
-        str_fundamentals_dict[party] = f'{party}_vote ~ {party}_diff + {party}_inc_party_cand_approval + {party}_poll + {party}_inc_tenure + {party}_rdi_yr_to_election + {party}_inflation_yoy'
-        str_fundamentals_dict[party] += f' + {party}_unemployment + race + education + gender + family_income' 
+        #str_fundamentals_dict[party] = f'{party}_vote ~ {party}_diff + {party}_inc_party_cand_approval + {party}_poll + {party}_inc_tenure + {party}_rdi_yr_to_election + {party}_inflation_yoy'
+        #str_fundamentals_dict[party] += f' + {party}_unemployment + race + education + gender + family_income' 
+        #str_fundamentals_dict[party] = f'{party}_vote ~ {party}_diff + {party}_inc_party_cand_approval + {party}_inc_tenure + {party}_rdi_yr_to_election + {party}_inflation_yoy'
+        #str_fundamentals_dict[party] += f'+ race + education + gender + family_income'
+        #str_fundamentals_dict[party] = f'{party}_vote ~ {party}_poll'
+        str_fundamentals_dict[party] = f'{party}_vote ~ {party}_diff'
     #most of the features from the model used to predict the incumbent's state vote share, plus unemployment
     #str_fundamentals = 'vote ~ diff_diff + rdi_yr_to_election + unemployment + lean_prev + lean_prev2 + hlean_prev + hlean_prev2 + inc_party_cand_approval + inflation_yoy + inc_tenure' 
     
+    default['df'] = anes
     if MULTI_PARTY_MODE:
-        df_fundamentals, model_fundamentals_dict = create_model_fundamentals_multi(df_fundamentals, str_fundamentals_dict, DEFAULT)
-        summary_fundamentals = append_accuracy_multi(df_fundamentals, summary_fundamentals, YEAR)
+        df_fundamentals, model_fundamentals_dict = create_model_fundamentals_multi(df_fundamentals, str_fundamentals_dict, default)
+        default['df_fundamentals'] = df_fundamentals
+        summary_fundamentals = append_accuracy_multi(df_fundamentals, summary_fundamentals, default)
     else:
         df_fundamentals, model_fundamentals = create_model_fundamentals(df_fundamentals, str_fundamentals)
+        default['df_fundamentals'] = df_fundamentals
         summary_fundamentals = append_accuracy(df_fundamentals, summary_fundamentals)
         summary_fundamentals = append_params(model_fundamentals, summary_fundamentals)
 
@@ -435,20 +553,20 @@ else:
     summary_demographics = {'accuracy': '', 'params': '', 'error_df': dict()}
     summary_combined = {'accuracy': '', 'params': '', 'error_df': dict()}
     #range starts at 1976 because there is no ideology data before 1972
-    for YEAR in range(1972,2024,4):
+    for default['year'] in range(1972,2024,4):
         df_fundamentals_temp = df_fundamentals
         #For each election, create fundamentals regression while excluding current election
         if MULTI_PARTY_MODE and EXCLUDE_CURR_YR:
-            df_fundamentals_garbage, model_fundamentals_dict = create_model_fundamentals_multi(df_fundamentals[df_fundamentals['year'] != YEAR], 
-                                                                                       str_fundamentals_dict, DEFAULT)
+            df_fundamentals_garbage, model_fundamentals_dict = create_model_fundamentals_multi(df_fundamentals[df_fundamentals['year'] != default['year']], 
+                                                                                       str_fundamentals_dict, default)
         elif EXCLUDE_CURR_YR:
-            df_fundamentals_garbage, model_fundamentals = create_model_fundamentals(df_fundamentals[df_fundamentals['year'] != YEAR],
-                                                                            str_fundamentals, DEFAULT)
+            df_fundamentals_garbage, model_fundamentals = create_model_fundamentals(df_fundamentals[df_fundamentals['year'] != default['year']],
+                                                                            str_fundamentals, default)
         #Experiment with dividing prediction model into two parts: one to predict the effect of economic fundamentals and ideological factors,
         #the other to predict rapidly changing coefficients of race and education -- the predictions of these two models will be averaged
-        df_fundamentals_subs = df_fundamentals[df_fundamentals['year'] == YEAR]
+        df_fundamentals_subs = df_fundamentals[df_fundamentals['year'] == default['year']]
         #df_fundamentals_subs = df_fundamentals_subs[(df_fundamentals_subs[:] != 'no matching code').all(axis = 1)] #drop all observations without matching codes 
-        df_demographics = anes[anes['year'] == YEAR]
+        df_demographics = anes[anes['year'] == default['year']]
         #df_demographics = df_demographics[(df_demographics[:] != 'no matching code').all(axis = 1)] #drop all observations without matching codes 
         
         ##****************REGRESSION FOR DUAL-PARTY MODE, VARIES BY ELECTION****************
@@ -477,8 +595,8 @@ else:
             if MULTI_PARTY_MODE:
                 for party in PARTIES:
                     df_demographics[f'{party}_pred_vote_prob'] = model_demographics.predict(df_demographics)
-                df_demographics = predict_vote_multi(df_demographics, DEFAULT) 
-                summary_demographics = append_accuracy_multi(df_demographics, summary_demographics, YEAR)
+                df_demographics = predict_vote_multi(df_demographics, default) 
+                summary_demographics = append_accuracy_multi(df_demographics, summary_demographics, default)
             else:
                 df_demographics['pred_vote_prob'] = model_demographics.predict(df_demographics)
                 df_demographics = predict_vote(df_demographics)
@@ -492,15 +610,15 @@ else:
                     for party in PARTIES:
                         df_averaged[f'{party}_pred_vote_prob'] = (df_fundamentals_subs[f'{party}_pred_vote_prob'] + df_demographics[f'{party}_pred_vote_prob']) /2
            
-                    df_averaged = predict_vote_multi(df_averaged, DEFAULT)
-                    summary_combined = append_accuracy_multi(df_averaged, summary_combined, YEAR)#no summary demographics
+                    df_averaged = predict_vote_multi(df_averaged, default)
+                    summary_combined = append_accuracy_multi(df_averaged, summary_combined, default)#no summary demographics
 
                     #use prediction fit to entire dataset 1972-2012 to each election in this period
                     df_fundamentals_moving = df_fundamentals_subs.copy()
                     for party in PARTIES:
                         df_fundamentals_moving[f'{party}_pred_vote_prob'] = model_fundamentals_dict[party].predict(df_fundamentals_moving)
-                    df_fundamentals_moving = predict_vote_multi(df_fundamentals_moving, DEFAULT) 
-                    summary_fundamentals_moving = append_accuracy_multi(df_fundamentals_moving, summary_fundamentals_moving, YEAR)
+                    df_fundamentals_moving = predict_vote_multi(df_fundamentals_moving, default) 
+                    summary_fundamentals_moving = append_accuracy_multi(df_fundamentals_moving, summary_fundamentals_moving, default)
                 else:
                     df_averaged = df_fundamentals_subs.copy()
                     df_averaged['pred_vote_prob'] = (df_fundamentals_subs['pred_vote_prob'] + df_demographics['pred_vote_prob']) /2
@@ -523,9 +641,9 @@ else:
     
     if MULTI_PARTY_MODE:
         for party in PARTIES:
-            model_fundamentals_dict[party].save(f'{path}/{party}_model_fundamentals.pickle')
+            model_fundamentals_dict[party].save(f'{REGRESSION_OBJ_PATH}/{party}_model_fundamentals.pickle')
     else:
-        model_fundamentals.save(f'{path}/model_fundamentals.pickle')
+        model_fundamentals.save(f'{REGRESSION_OBJ_PATH}/model_fundamentals.pickle')
     
     title = '1972-2020 Fundamentals Model Accuracy'
     print_accuracy(summary_fundamentals, title)
