@@ -3,9 +3,9 @@ import pandas as pd
 
 election = default.copy()
 if RUN_REGRESSIONS:#if we retabulate the data, save it to file
-    election['df_init'] = default['df_init'].copy()
+    election['df_init'] = default['df'].copy()
     for party in default['parties']:
-        for key in default['df_init'].keys():
+        for key in default['df'].keys():
             if party in key:
                 election['df_init'] = election['df_init'].drop(key, axis ='columns') 
     election['df_init'].to_csv('simulation_data.csv')
@@ -15,7 +15,7 @@ else:
     election['df_init'] = pd.read_csv('simulation_data.csv')
 
 election['year'] = 2020
-election['inc_party_cand_approval'] = 0.44*100 #0.44 #Harris approval rating, according to 538
+election['inc_party_cand_approval'] = 0.44*100 #Harris approval rating, according to 538
 election['inc_party'] = 'dem'#Democrats 
 election['inc_party_tenure'] = 4
 election['rdi_yr_to_election'] = 50360 / 50151 #RDI PC in Q2 2024 / RDI PC in Q2 2023 https://fred.stlouisfed.org/series/A229RX0Q048SBEA
@@ -41,7 +41,9 @@ election['candidates'] = {
      'code': 2,
     'ideology': 4.25,
     'poll': 0.05}
+
 }
+
 
 election['parties'] = [x for x in election['candidates'].keys()]
 election['party_codes'] = dict(zip(election['parties'], [x['code'] for x in election['candidates'].values()]))

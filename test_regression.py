@@ -10,7 +10,7 @@ pd.options.mode.chained_assignment = None  # default='warn' #silence setting on 
 
 YEAR_WIDTH = 6
 FIELD_WIDTH = 15
-RUN_REGRESSIONS = False
+RUN_REGRESSIONS = True
 EXCLUDE_CURR_YR = False #for measuring the out-of-sample accuracy
 REGRESSION_OBJ_PATH = os.getcwd() + '/regression_models'
 DEFAULT_REGR = f'{REGRESSION_OBJ_PATH}/dem_model_fundamentals.pickle'
@@ -541,11 +541,11 @@ else:
         #str_fundamentals_dict[party] = f'{party}_vote ~ {party}_diff + {party}_inc_party_cand_approval + {party}_inc + {party}_inc_tenure + {party}_rdi_yr_to_election + {party}_inflation_yoy'
         #str_fundamentals_dict[party] = f'{party}_vote ~ {party}_diff + {party}_inc_party_cand_approval + {party}_poll + {party}_inc_tenure + {party}_rdi_yr_to_election + {party}_inflation_yoy'
         #str_fundamentals_dict[party] += f' + {party}_unemployment + race + education + gender + family_income' 
-        str_fundamentals_dict[party] = f'{party}_vote ~ {party}_diff + {party}_inc_party_cand_approval + {party}_inc_tenure + {party}_rdi_yr_to_election + {party}_inflation_yoy'
-        str_fundamentals_dict[party] += f'+ race + education + gender + family_income'
+        #str_fundamentals_dict[party] = f'{party}_vote ~ {party}_diff + {party}_inc_party_cand_approval + {party}_inc_tenure + {party}_rdi_yr_to_election + {party}_inflation_yoy'
+        #str_fundamentals_dict[party] += f'+ race + education + gender + family_income'
         #str_fundamentals_dict[party] = f'{party}_vote ~ {party}_poll'
         #REGRESSION BASED ONLY ON IDEOLOGY
-        #str_fundamentals_dict[party] = f'{party}_vote ~ {party}_diff'
+        str_fundamentals_dict[party] = f'{party}_vote ~ {party}_diff'
     #most of the features from the model used to predict the incumbent's state vote share, plus unemployment
     #str_fundamentals = 'vote ~ diff_diff + rdi_yr_to_election + unemployment + lean_prev + lean_prev2 + hlean_prev + hlean_prev2 + inc_party_cand_approval + inflation_yoy + inc_tenure' 
     
