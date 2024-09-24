@@ -10,7 +10,7 @@ pd.options.mode.chained_assignment = None  # default='warn' #silence setting on 
 
 YEAR_WIDTH = 6
 FIELD_WIDTH = 15
-RUN_REGRESSIONS = False
+RUN_REGRESSIONS = True
 EXCLUDE_CURR_YR = False #for measuring the out-of-sample accuracy
 REGRESSION_OBJ_PATH = os.getcwd() + '/regression_models'
 DEFAULT_REGR = f'{REGRESSION_OBJ_PATH}/dem_model_fundamentals.pickle'
@@ -73,9 +73,16 @@ def get_vars_to_norm():
 
 #function for simulation.py to set the parties in the analysis
 def initialize(election):
-    df = election['df']
+    #df = election['df']
+    df = election['df_init'].copy()
+    df = df[df['year'] == election['year']]
+    df['inc_party_cand_approval'] = election['inc_party_cand_approval']
+    df['inflation_yoy'] = election['inflation_yoy']
+    df['inc_party'] = election['inc_party']
+    df['inc_party_tenure'] = election['inc_party_tenure']
+    df['rdi_yr_to_election'] = election['rdi_yr_to_election']
+
     candidates = election['candidates']
-    #PARTY_CODES = dict(zip([x['party'] for x in candidates.values()], [x['code'] for x in candidates.values()]))
     PARTIES = list(candidates.keys())
     inc_str = election['inc_party']
     df['incumbency'] = election['party_codes'][inc_str]
@@ -83,6 +90,7 @@ def initialize(election):
         df[f'{party}_ideo'] = candidates[party]['ideology']
         df[f'{party}_poll'] = candidates[party]['poll']
 
+    election['df'] = df
     df = compute_distances(election)
     df = normalize(df, get_vars_to_norm())
     df = add_party_codes_votes(election)
@@ -469,7 +477,7 @@ else:
     regress_data = regress_data.reset_index()
     #reset index so that we may retreive republican two party national pop. vote shares for each election
     regress_data = regress_data.set_index(['year','state'])
-    regress_data.to_csv('regress_data.csv')
+    #regress_data.to_csv('regress_data.csv')
 
     anes = anes[(anes['year'] % 4 == 0)]
     # delete all rows with zeroes indicating missing data
@@ -502,6 +510,8 @@ else:
     for var in vars_to_normalize:
         anes[f'{var}_mean'] = np.mean(anes[var])
         anes[f'{var}_std'] = np.std(anes[var])
+    #save non-normalized data with means and standard deviations for use in normalize() 
+    regress_data.to_csv('regress_data.csv')
     anes = normalize(anes, vars_to_normalize)
 
     if MULTI_PARTY_MODE:
@@ -534,6 +544,7 @@ else:
         #str_fundamentals_dict[party] = f'{party}_vote ~ {party}_diff + {party}_inc_party_cand_approval + {party}_inc_tenure + {party}_rdi_yr_to_election + {party}_inflation_yoy'
         #str_fundamentals_dict[party] += f'+ race + education + gender + family_income'
         #str_fundamentals_dict[party] = f'{party}_vote ~ {party}_poll'
+        #REGRESSION BASED ONLY ON IDEOLOGY
         str_fundamentals_dict[party] = f'{party}_vote ~ {party}_diff'
     #most of the features from the model used to predict the incumbent's state vote share, plus unemployment
     #str_fundamentals = 'vote ~ diff_diff + rdi_yr_to_election + unemployment + lean_prev + lean_prev2 + hlean_prev + hlean_prev2 + inc_party_cand_approval + inflation_yoy + inc_tenure' 
