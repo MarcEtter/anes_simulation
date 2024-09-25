@@ -10,7 +10,7 @@ pd.options.mode.chained_assignment = None  # default='warn' #silence setting on 
 
 YEAR_WIDTH = 6
 FIELD_WIDTH = 15
-RUN_REGRESSIONS = True
+RUN_REGRESSIONS = False
 EXCLUDE_CURR_YR = False #for measuring the out-of-sample accuracy
 REGRESSION_OBJ_PATH = os.getcwd() + '/regression_models'
 DEFAULT_REGR = f'{REGRESSION_OBJ_PATH}/dem_model_fundamentals.pickle'
@@ -50,9 +50,9 @@ MULT_BY_POLLS:
 """
 
 #This file is needed to execute functions including those to evaluate the accuracy of predictions
-path = 'regress_data.csv'
+path = 'model_data/regress_data.csv'
 if os.path.exists(path):
-    regress_data = pd.read_csv('regress_data.csv')
+    regress_data = pd.read_csv('model_data/regress_data.csv')
 else:
     print('Error: File "regress_data.csv" not found.')
 
@@ -437,12 +437,12 @@ if not RUN_REGRESSIONS:
         model_fundamentals = load_model_fundamentals(REGRESSION_OBJ_PATH)
 else:
     ##Pre-process data from anes csv
-    anes = pd.read_csv('anes_select.csv')
+    anes = pd.read_csv('model_data/anes_select.csv')
     #Use regression incumbent-nonincumbent version of regression data to see if that changes the results 
     #regress_data_inc = pd.read_csv('')
-    cand_positions = pd.read_csv('candidate_positions_unweighted.csv')
-    gallup = pd.read_csv('gallup_2party.csv')
-    regress_data = pd.read_csv('regression_data_altered.csv')
+    cand_positions = pd.read_csv('model_data/candidate_positions_unweighted.csv')
+    gallup = pd.read_csv('model_data/gallup_2party.csv')
+    regress_data = pd.read_csv('model_data/regression_data_altered.csv')
     regress_data = regress_data[['year',
                                 'state',
                                 'dem_share',
@@ -477,7 +477,7 @@ else:
     regress_data = regress_data.reset_index()
     #reset index so that we may retreive republican two party national pop. vote shares for each election
     regress_data = regress_data.set_index(['year','state'])
-    #regress_data.to_csv('regress_data.csv')
+    #regress_data.to_csv('model_data/regress_data.csv')
 
     anes = anes[(anes['year'] % 4 == 0)]
     # delete all rows with zeroes indicating missing data
@@ -511,7 +511,7 @@ else:
         anes[f'{var}_mean'] = np.mean(anes[var])
         anes[f'{var}_std'] = np.std(anes[var])
     #save non-normalized data with means and standard deviations for use in normalize() 
-    regress_data.to_csv('regress_data.csv')
+    regress_data.to_csv('model_data/regress_data.csv')
     anes = normalize(anes, vars_to_normalize)
 
     if MULTI_PARTY_MODE:

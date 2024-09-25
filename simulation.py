@@ -8,11 +8,11 @@ if RUN_REGRESSIONS:#if we retabulate the data, save it to file
         for key in default['df'].keys():
             if party in key:
                 election['df_init'] = election['df_init'].drop(key, axis ='columns') 
-    election['df_init'].to_csv('simulation_data.csv')
+    election['df_init'].to_csv('model_data/simulation_data.csv')
 else:   
     #Below df is trimmed to only necessary variables, but could leave extra variables in the simulation data csv
     #This would permit the simulation of historical elections where specifying fundamentals above would be redundant
-    election['df_init'] = pd.read_csv('simulation_data.csv')
+    election['df_init'] = pd.read_csv('model_data/simulation_data.csv')
 
 election['year'] = 2020
 election['inc_party_cand_approval'] = 0.44*100 #Harris approval rating, according to 538
@@ -70,7 +70,7 @@ while i <= 7:
     i += 0.1
 
 test = pd.DataFrame(test).transpose()
-test.to_csv('test.csv')
+test.to_csv('out/test.csv')
 
 sim_df = election['df']
 state_shares = dict()
@@ -80,4 +80,4 @@ for fips_code in sim_df['fips'].value_counts().keys():
 state_shares = pd.DataFrame(state_shares).transpose()
 state_shares['fips'] = state_shares.index
 state_shares['state'] = state_shares['fips'].apply(lambda x: state_name[x])
-state_shares.to_csv('state_shares.csv')
+state_shares.to_csv('out/state_shares.csv')
