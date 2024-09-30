@@ -5,6 +5,7 @@ import statsmodels.api as sm
 #from statsmodels.regression.linear_model import OLSResults
 import os
 from code_to_category import *
+from rake import *
 import re #for format string parsing
 pd.options.mode.chained_assignment = None  # default='warn' #silence setting on copy of pandas slice warning
 
@@ -56,7 +57,7 @@ if os.path.exists(path):
 else:
     print('Error: File "regress_data.csv" not found.')
 
-def get_vars_to_norm():
+def get_vars_to_norm(PARTIES):
     vars_to_normalize = ['age',
                     'lean_prev',
                     'lean_prev2',
@@ -92,7 +93,7 @@ def initialize(election):
 
     election['df'] = df
     df = compute_distances(election)
-    df = normalize(df, get_vars_to_norm())
+    df = normalize(df, get_vars_to_norm(election['parties']))
     df = add_party_codes_votes(election)
     df = add_party_vars(election)
 
@@ -143,12 +144,40 @@ def simulate_election(election, model_fundamentals_dict):
 
     return sim_df
 
-def rake(sample, target):
-    #marginal_probs = 
-    #sample_marginal_probs = 
+def rake_state(year, code):
+    #race, gender, age
+    target_marginal_probs = list()
+    #return dictionary containing marginal probabilities of categories in each categorical variable
+    target_marginal_probs = {}
+    for key in census_keys.keys():
+        key_group = census_keys[key]
+        target_marginal_probs[key] = states.loc[[year, code],key_group] / states.loc[[year, code],key_group].sum(axis = 'columns')
 
+    return rake(default['df'], target_marginal_probs)
 
-    pass
+def rake(sample, target_marginal_probs):
+    sample_marginal_probs = {}
+    #TODO: Pair 
+
+    #creates dict of dataframes, each containing marginal probabilities of categories for one categorical variable
+    scalars = dict()
+    for key in mapping.keys():
+        sample_marginal_probs[key] = sample[key].apply(lambda x: mapping[key][x]).value_counts() / len(sample)
+        scalars[key] = target_marginal_probs[key] / sample_marginal_probs[key]
+
+    max_iter = 10
+    i = 0
+    while i < max_iter:
+        for key in census_keys.keys():
+            #need to update sample_marginal_probs after each iteration
+            #get corresponding census category
+            scalar_dict = scalars[key] #get dict of scalars per category
+            mapping_dict = mapping[key] #get categories from codes
+            scalar_vect = sample[key].apply(lambda x: scalar_dict[mapping_dict[x]])
+            sample['weight1'] = sample['weight1'] * scalar_vect
+        i+=1
+        
+    return sample
     
 def compute_distances(election):
     df = election['df']
@@ -504,7 +533,7 @@ else:
     anes['incumbency'] = anes['year'].apply(lambda x: code_to_category(x,incumbent))
     anes['vote'] = anes['vote'] - 1
     #only normalize continuous variables
-    vars_to_normalize = get_vars_to_norm()
+    vars_to_normalize = get_vars_to_norm(default['parties'])
 
     #save conversion to normalized scale
     for var in vars_to_normalize:
