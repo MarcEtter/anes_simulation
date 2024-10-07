@@ -8,6 +8,8 @@ states = states.set_index(['year', 'fips'], drop = False)
 #American National Election studies raking function
 #Note: there are other variables whose marginal probabilities may be estimated (e.g. urban/rural status),
 #but they are omitted in the function's first version
+anes_family_income = pd.read_csv('model_data/anes_income_percentiles.csv').set_index('year')
+anes_family_income = anes_family_income.drop(columns=['17','34','68','96'])
 
 census_keys =  {
     'gender': [
@@ -36,7 +38,23 @@ census_keys =  {
     "Families: Income $10,000 to $14,999",
     "Families: Income $15,000 to $24,999",
     "Families: Income $25,000 to $49,999",
-    "Families: Income $50,000 or more"]
+    "Families: Income $50,000 or more"],
+
+    'family_income':
+    ['Families: Income less than $10,000',	
+     'Families: Income $10,000 to $14,999',	
+     'Families: Income $15,000 to $24,999',	
+     'Families: Income $25,000 to $49,999',	
+     'Families: Income $50,000 or more'],
+
+    #minimum range 0 and maximum range infinity dropped
+     'family_income_numeric':
+     [
+         10000,
+         15000,
+         25000,
+         50000
+     ]
 }
 
 #store mapping from anes keys to census keys with dictionaries relating 
@@ -143,3 +161,4 @@ mapping = {
     7: "Persons: Asian and Pacific Islander and Other and Two or More Races"#Non-white and non-black (1948-1964)
     }
 }
+

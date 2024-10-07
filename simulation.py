@@ -57,6 +57,9 @@ model_fundamentals_dict = load_model_fundamentals_multi(REGRESSION_OBJ_PATH, ele
 election['df'] = simulate_election(election, model_fundamentals_dict)
 print(get_vote_shares(election))
 
+
+rake_state(1976,'NJ')
+
 test = {}
 i = 1
 while i <= 7:

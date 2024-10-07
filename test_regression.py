@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 import statsmodels.formula.api as smf
 import statsmodels.api as sm
+from scipy.optimize import curve_fit
+from scipy.stats import norm
 #from statsmodels.regression.linear_model import OLSResults
 import os
 from code_to_category import *
@@ -144,14 +146,29 @@ def simulate_election(election, model_fundamentals_dict):
 
     return sim_df
 
+def norm_cdf(x, mu, sigma):
+    return norm.cdf(x, mu, sigma)
+
 def rake_state(year, code):
     #race, gender, age
     target_marginal_probs = list()
     #return dictionary containing marginal probabilities of categories in each categorical variable
     target_marginal_probs = {}
-    for key in census_keys.keys():
+    for key in census_keys.keys()[:-1]:#exclude special case family_income
         key_group = census_keys[key]
         target_marginal_probs[key] = states.loc[[year, code],key_group] / states.loc[[year, code],key_group].sum(axis = 'columns')
+
+    #fit a curve to the logarithm of the state income distribution
+    state_ranges = census_keys['family_income']
+    state_bins = states.loc[[year,code],state_ranges] / states.loc[[year,code],state_ranges].sum(axis = 'columns')
+    xdata = [np.log(x) for x in census_keys['family_income_numeric']]
+    ydata = [x for x in np.cum_sum(state_bins)][:-1]#drop percentile 1.00
+    popt, pcov = curve_fit(norm_cdf, xdata, ydata)
+
+    #get state level percentiles of anes income levels
+    anes_ranges = anes_family_income.loc[year]
+    percentiles = [norm_cdf(np.log(x), popt[0], popt[1]) for x in anes_ranges] 
+    target_marginal_probs['family_income'] = np.diff(percentiles)
 
     return rake(default['df'], target_marginal_probs)
 
