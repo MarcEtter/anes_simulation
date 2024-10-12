@@ -19,6 +19,7 @@ REGRESSION_OBJ_PATH = os.getcwd() + '/regression_models'
 DEFAULT_REGR = f'{REGRESSION_OBJ_PATH}/dem_model_fundamentals.pickle'
 MULT_BY_POLLS = True
 CONSTRAIN_VOTE_PROB = True #constrains vote party vote probabilities of voters so they sum to 1.0
+NORMALIZE = False
 
 default = {}
 default['party_codes'] = {'dem':0, 'gop':1}
@@ -26,6 +27,7 @@ default['parties'] = list(default['party_codes'].keys())
 default['model'] = 'logit'
 default['year'] = 1948
 default['multi_party_mode'] = True
+default['normalize'] = NORMALIZE
 default['mult_in_dir_of_incumbency'] = [
 'rdi_yr_to_election',
 'rdi_election_year_change',
@@ -95,7 +97,8 @@ def initialize(election):
 
     election['df'] = df
     df = compute_distances(election)
-    df = normalize(df, get_vars_to_norm(election['parties']))
+    if election['normalize']:
+        df = normalize(df, get_vars_to_norm(election['parties']))
     df = add_party_codes_votes(election)
     df = add_party_vars(election)
 
@@ -149,49 +152,89 @@ def simulate_election(election, model_fundamentals_dict):
 def norm_cdf(x, mu, sigma):
     return norm.cdf(x, mu, sigma)
 
-def rake_state(year, code):
-    #race, gender, age
-    target_marginal_probs = list()
+def compute_marginals(year, fips, keys, df):
+    step = 10
+    if year%10 == 0:
+        total = df.loc[(year, fips),keys].sum(axis = 'columns').reset_index(drop = True)[0]
+        df = df.loc[(year, fips),keys].reset_index(drop = True) / total
+        return df
+    else:#linearly interpolate
+        x_1 = int(np.trunc(year / step) * step)
+        x_2 = int(np.trunc((year + step) / step) * step)
+        total_1 = df.loc[(x_1, fips),keys].sum(axis = 'columns').reset_index(drop = True)[0]
+        total_2 = df.loc[(x_2, fips),keys].sum(axis = 'columns').reset_index(drop = True)[0]
+        y_1 = df.loc[(x_1, fips),keys].reset_index(drop = True) / total_1
+        y_2 = df.loc[(x_2, fips),keys].reset_index(drop = True) / total_2
+        return (y_2 - y_1) * (year - x_1) / (x_2 - x_1) + y_1
+ 
+def rake_state(year, code, election_df):
     #return dictionary containing marginal probabilities of categories in each categorical variable
     target_marginal_probs = {}
-    for key in census_keys.keys()[:-1]:#exclude special case family_income
+    fips = code_to_fips[code]
+    for key in list(census_keys.keys())[:-2]:#exclude special case family_income
         key_group = census_keys[key]
-        target_marginal_probs[key] = states.loc[[year, code],key_group] / states.loc[[year, code],key_group].sum(axis = 'columns')
+        target_marginal_probs[key] = compute_marginals(year, fips, key_group, states)
 
-    #fit a curve to the logarithm of the state income distribution
+    #fit a curve to the cdf of the logged state income distribution
     state_ranges = census_keys['family_income']
-    state_bins = states.loc[[year,code],state_ranges] / states.loc[[year,code],state_ranges].sum(axis = 'columns')
-    xdata = [np.log(x) for x in census_keys['family_income_numeric']]
-    ydata = [x for x in np.cum_sum(state_bins)][:-1]#drop percentile 1.00
+    state_bins = compute_marginals(year, fips, state_ranges, states)
+    xlower = np.log(2000) #subtract by lower bound to increase percentage range and ensure estimation is successful 
+    def scale_income(x):
+        return np.log(x) - xlower
+    xdata = [scale_income(x) for x in census_keys['family_income_numeric']]
+    ydata = [x for x in np.cumsum(state_bins.loc[0])][:-1]#drop percentile 1.00
     popt, pcov = curve_fit(norm_cdf, xdata, ydata)
 
     #get state level percentiles of anes income levels
-    anes_ranges = anes_family_income.loc[year]
-    percentiles = [norm_cdf(np.log(x), popt[0], popt[1]) for x in anes_ranges] 
-    target_marginal_probs['family_income'] = np.diff(percentiles)
+    try:
+        anes_ranges = anes_family_income.loc[year]
+    except:
+        #TODO: Can make function to select two closest datapoints and interpolation
+        available_yrs = anes_family_income['year'].value_counts()
+        x_1, x_2 = (available_yrs.values - year).sort()[:2]
+        y_1, y_2 = anes_family_income.loc[x_1], anes_family_income.loc[x_2]
+        anes_ranges = (y_2 - y_1) / (x_2 - x_1) * (x_2 - year) + y_1
 
-    return rake(default['df'], target_marginal_probs)
+    percentiles = [norm_cdf(scale_income(x), popt[0], popt[1]) for x in anes_ranges] 
+    percentiles = [0] + percentiles + [1]
+    anes_codes = np.array(range(len(anes_ranges) + 1)) + 1
+    temp = {0: dict(zip(anes_codes, np.diff(percentiles)))}
+    target_marginal_probs['family_income'] = pd.DataFrame(temp).transpose()
+
+    return rake(election_df, target_marginal_probs)
 
 def rake(sample, target_marginal_probs):
     sample_marginal_probs = {}
-    #TODO: Pair 
-
     #creates dict of dataframes, each containing marginal probabilities of categories for one categorical variable
     scalars = dict()
-    for key in mapping.keys():
-        sample_marginal_probs[key] = sample[key].apply(lambda x: mapping[key][x]).value_counts() / len(sample)
-        scalars[key] = target_marginal_probs[key] / sample_marginal_probs[key]
-
     max_iter = 10
     i = 0
-    while i < max_iter:
-        for key in census_keys.keys():
+    rake_keys = list(census_keys.keys())[:-1]
+    converge = dict(zip(rake_keys, [False] * len(rake_keys)))
+    converge_thresh = 0.04
+
+    #convert sample categories to target categories
+    sample_convert = pd.DataFrame(sample[rake_keys + ['weight1']])
+    for key in mapping.keys():#covert all columns that have mappings to census variables
+        anes_to_census = mapping[key] 
+        sample_convert[key] = sample[key].apply(lambda x: anes_to_census[x])
+
+    while i < max_iter and not all(converge.values()):
+        for key in rake_keys:
             #need to update sample_marginal_probs after each iteration
-            #get corresponding census category
-            scalar_dict = scalars[key] #get dict of scalars per category
-            mapping_dict = mapping[key] #get categories from codes
-            scalar_vect = sample[key].apply(lambda x: scalar_dict[mapping_dict[x]])
-            sample['weight1'] = sample['weight1'] * scalar_vect
+            sample_marginal_probs[key] = sample_convert.groupby(key)['weight1'].agg(pd.Series.sum) / sample['weight1'].sum() 
+            target = pd.Series(target_marginal_probs[key].loc[0])
+            joined = pd.concat([target, sample_marginal_probs[key]], axis = 'columns').fillna(1)
+            scalars_new = dict(joined.iloc[:,0] / joined.iloc[:,1])
+            
+            if i > 0 and np.mean(abs(sample_marginal_probs[key] - target_marginal_probs[key].loc[0])) < converge_thresh:
+                converge[key] = True
+            else:
+                scalars[key] = scalars_new
+
+            #convert anes category to census category and get corresponding scalar
+            scalar_vect = sample_convert[key].apply(lambda x: scalars_new[x])
+            sample_convert['weight1'] = sample_convert['weight1'] * scalar_vect
         i+=1
         
     return sample
@@ -553,12 +596,14 @@ else:
     vars_to_normalize = get_vars_to_norm(default['parties'])
 
     #save conversion to normalized scale
-    for var in vars_to_normalize:
-        anes[f'{var}_mean'] = np.mean(anes[var])
-        anes[f'{var}_std'] = np.std(anes[var])
+    if default['normalize']:
+        for var in vars_to_normalize:
+            anes[f'{var}_mean'] = np.mean(anes[var])
+            anes[f'{var}_std'] = np.std(anes[var])
     #save non-normalized data with means and standard deviations for use in normalize() 
     regress_data.to_csv('model_data/regress_data.csv')
-    anes = normalize(anes, vars_to_normalize)
+    if default['normalize']:
+        anes = normalize(anes, vars_to_normalize)
 
     if MULTI_PARTY_MODE:
         anes = add_party_codes_votes(default)

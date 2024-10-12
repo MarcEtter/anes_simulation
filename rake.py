@@ -1,8 +1,8 @@
 import pandas as pd
 
 states = pd.read_excel('model_data/nhgis0002_ts_nominal_state_modified.xlsx')
-states = states.rename(columns = dict(states.loc[0]))[1:]
-states = states.rename(columns = {'Row Source Year': 'year', 'fips': 'FIPS State Code'})
+#states = states.rename(columns = dict(states.loc[0]))[1:]
+states = states.rename(columns = {'Row Source Year': 'year', 'FIPS State Code': 'fips'})
 states = states.set_index(['year', 'fips'], drop = False)
 #Keys from state level gis data representing variables to be used in the 
 #American National Election studies raking function
@@ -27,25 +27,19 @@ census_keys =  {
     "Persons: White (single race)",
     "Persons: Black or African American (single race)",
     "Persons: American Indian and Alaska Native (single race)",
-    "Persons: Asian and Pacific Islander and Other Race (single race)",
-    "Persons: Two or More Races"],
+    "Persons: Asian and Pacific Islander and Other and Two or More Races"],
+
     'education': [
     "Persons: 25 years and over ~ Less than 9th grade",
     "Persons: 25 years and over ~ 9th grade to 3 years of college (until 1980) or to some college or associate's degree (since 1990)",
     "Persons: 25 years and over ~ 4 or more years of college (until 1980) or bachelor's degree or higher (since 1990)"],
+    
     'family_income': [
     "Families: Income less than $10,000",
     "Families: Income $10,000 to $14,999",
     "Families: Income $15,000 to $24,999",
     "Families: Income $25,000 to $49,999",
     "Families: Income $50,000 or more"],
-
-    'family_income':
-    ['Families: Income less than $10,000',	
-     'Families: Income $10,000 to $14,999',	
-     'Families: Income $15,000 to $24,999',	
-     'Families: Income $25,000 to $49,999',	
-     'Families: Income $50,000 or more'],
 
     #minimum range 0 and maximum range infinity dropped
      'family_income_numeric':
@@ -158,7 +152,27 @@ mapping = {
     4: "Persons: American Indian and Alaska Native (single race)", #American Indian or Alaska Native non-Hispanic (1966-2012) 
     5: "Persons: Asian and Pacific Islander and Other and Two or More Races",#Hispanic (1966-2012)
     6: "Persons: Asian and Pacific Islander and Other and Two or More Races",#Other or multiple races, non-Hispanic (1968-2012)
-    7: "Persons: Asian and Pacific Islander and Other and Two or More Races"#Non-white and non-black (1948-1964)
+    7: "Persons: Asian and Pacific Islander and Other and Two or More Races",#Non-white and non-black (1948-1964)
+    
+    #conversion for anes codes converted to anes categories
+    'White non-Hispanic':                               "Persons: White (single race)",
+    'Hispanic':                                         "Persons: Asian and Pacific Islander and Other and Two or More Races",
+    'Black non-Hispanic':                               "Persons: Black or African American (single race)",
+    'Asian or Pacific Islander, non-Hispanic':          "Persons: Asian and Pacific Islander and Other and Two or More Races",
+    'Other or multiple races, non-Hispanic':            "Persons: Asian and Pacific Islander and Other and Two or More Races",
+    'American Indian or Alaska Native non-Hispanic':    "Persons: American Indian and Alaska Native (single race)",
+    'no matching code':                                 "Persons: White (single race)"
+
+    },
+    
+    'education':{
+        '12 grades':                                "Persons: 25 years and over ~ 9th grade to 3 years of college (until 1980) or to some college or associate's degree (since 1990)",
+        '12 grades plus non-academic training':     "Persons: 25 years and over ~ 9th grade to 3 years of college (until 1980) or to some college or associate's degree (since 1990)",
+        '9-12 grades':                              "Persons: 25 years and over ~ 9th grade to 3 years of college (until 1980) or to some college or associate's degree (since 1990)",
+        'Advanced degree':                          "Persons: 25 years and over ~ 4 or more years of college (until 1980) or bachelor's degree or higher (since 1990)",
+        'BA level degree':                          "Persons: 25 years and over ~ 4 or more years of college (until 1980) or bachelor's degree or higher (since 1990)",
+        'Some college, no degree; AA degree':       "Persons: 25 years and over ~ 9th grade to 3 years of college (until 1980) or to some college or associate's degree (since 1990)",
+        'no matching code':                         "Persons: 25 years and over ~ 9th grade to 3 years of college (until 1980) or to some college or associate's degree (since 1990)"
     }
 }
 

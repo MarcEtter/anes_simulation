@@ -58,7 +58,7 @@ election['df'] = simulate_election(election, model_fundamentals_dict)
 print(get_vote_shares(election))
 
 
-rake_state(1976,'NJ')
+rake_state(1976,'NJ', election['df'])
 
 test = {}
 i = 1

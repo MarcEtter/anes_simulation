@@ -19,7 +19,7 @@ educ_category = {
     2: '9-12 grades',
     3: '12 grades',
     4: '12 grades plus non-academic training',
-    5: 'Some college, no degree; AA degree)',
+    5: 'Some college, no degree; AA degree',
     6: 'BA level degree',
     7: 'Advanced degree'}
 
