@@ -153,31 +153,35 @@ def norm_cdf(x, mu, sigma):
     return norm.cdf(x, mu, sigma)
 
 def compute_marginals(year, fips, keys, df):
-    step = 10
-    if year%10 == 0:
-        total = df.loc[(year, fips),keys].sum(axis = 'columns').reset_index(drop = True)[0]
-        df = df.loc[(year, fips),keys].reset_index(drop = True) / total
-        return df
-    else:#linearly interpolate
-        x_1 = int(np.trunc(year / step) * step)
-        x_2 = int(np.trunc((year + step) / step) * step)
-        total_1 = df.loc[(x_1, fips),keys].sum(axis = 'columns').reset_index(drop = True)[0]
-        total_2 = df.loc[(x_2, fips),keys].sum(axis = 'columns').reset_index(drop = True)[0]
-        y_1 = df.loc[(x_1, fips),keys].reset_index(drop = True) / total_1
-        y_2 = df.loc[(x_2, fips),keys].reset_index(drop = True) / total_2
-        return (y_2 - y_1) * (year - x_1) / (x_2 - x_1) + y_1
+    def eval(x):
+        #double brackets in df.loc[[x]] ensure that dataframe (not series) is returned
+        total = df.loc[[(x, fips)], keys].sum(axis = 'columns').reset_index(drop = True)[0]
+        return df.loc[[(x, fips)], keys].reset_index(drop = True) / total
+    
+    try:
+        return eval(year)
+    except:#linearly interpolate
+        return linear_interpolate(eval, year, df['year'])
  
-def rake_state(year, code, election_df):
+def linear_interpolate(fun, x, series):
+    indicies = pd.DataFrame(series.value_counts())
+    indicies['dist'] = abs(indicies.index - x)
+    neighbors = list((indicies.sort_values(by = ['dist'], ascending=True)[:2]).index)
+    x_1, x_2 = min(neighbors), max(neighbors)
+    y_1, y_2 = fun(x_1), fun(x_2)
+    return (y_2 - y_1) / (x_2 - x_1) * (x_2 - x) + y_1
+
+def rake_state(year, code, election_df, rake_keys):
     #return dictionary containing marginal probabilities of categories in each categorical variable
     target_marginal_probs = {}
     fips = code_to_fips[code]
-    for key in list(census_keys.keys())[:-2]:#exclude special case family_income
+    for key in rake_keys:
         key_group = census_keys[key]
-        target_marginal_probs[key] = compute_marginals(year, fips, key_group, states)
-
+        subs = states[['year'] + key_group].dropna()
+        target_marginal_probs[key] = compute_marginals(year, fips, key_group, subs)
+                                                       
     #fit a curve to the cdf of the logged state income distribution
-    state_ranges = census_keys['family_income']
-    state_bins = compute_marginals(year, fips, state_ranges, states)
+    state_bins = target_marginal_probs['family_income']
     xlower = np.log(2000) #subtract by lower bound to increase percentage range and ensure estimation is successful 
     def scale_income(x):
         return np.log(x) - xlower
@@ -189,11 +193,7 @@ def rake_state(year, code, election_df):
     try:
         anes_ranges = anes_family_income.loc[year]
     except:
-        #TODO: Can make function to select two closest datapoints and interpolation
-        available_yrs = anes_family_income['year'].value_counts()
-        x_1, x_2 = (available_yrs.values - year).sort()[:2]
-        y_1, y_2 = anes_family_income.loc[x_1], anes_family_income.loc[x_2]
-        anes_ranges = (y_2 - y_1) / (x_2 - x_1) * (x_2 - year) + y_1
+        anes_ranges = linear_interpolate(lambda x: anes_family_income.loc[x], year, anes_family_income['year'])
 
     percentiles = [norm_cdf(scale_income(x), popt[0], popt[1]) for x in anes_ranges] 
     percentiles = [0] + percentiles + [1]
@@ -201,17 +201,16 @@ def rake_state(year, code, election_df):
     temp = {0: dict(zip(anes_codes, np.diff(percentiles)))}
     target_marginal_probs['family_income'] = pd.DataFrame(temp).transpose()
 
-    return rake(election_df, target_marginal_probs)
+    return rake(election_df, target_marginal_probs, rake_keys)
 
-def rake(sample, target_marginal_probs):
+def rake(sample, target_marginal_probs, rake_keys):
     sample_marginal_probs = {}
     #creates dict of dataframes, each containing marginal probabilities of categories for one categorical variable
     scalars = dict()
     max_iter = 10
     i = 0
-    rake_keys = list(census_keys.keys())[:-1]
     converge = dict(zip(rake_keys, [False] * len(rake_keys)))
-    converge_thresh = 0.04
+    converge_thresh = 0.95
 
     #convert sample categories to target categories
     sample_convert = pd.DataFrame(sample[rake_keys + ['weight1']])
@@ -227,7 +226,7 @@ def rake(sample, target_marginal_probs):
             joined = pd.concat([target, sample_marginal_probs[key]], axis = 'columns').fillna(1)
             scalars_new = dict(joined.iloc[:,0] / joined.iloc[:,1])
             
-            if i > 0 and np.mean(abs(sample_marginal_probs[key] - target_marginal_probs[key].loc[0])) < converge_thresh:
+            if i > 0 and np.corrcoef(sample_marginal_probs[key], target_marginal_probs[key].loc[0]) > converge_thresh:
                 converge[key] = True
             else:
                 scalars[key] = scalars_new
@@ -236,8 +235,19 @@ def rake(sample, target_marginal_probs):
             scalar_vect = sample_convert[key].apply(lambda x: scalars_new[x])
             sample_convert['weight1'] = sample_convert['weight1'] * scalar_vect
         i+=1
-        
-    return sample
+
+    #create table with sample and target marginal probabilities for all variables
+    prob_table = pd.DataFrame()
+    for key in rake_keys:
+        initial = pd.Series(sample.groupby(key)['weight1'].agg(pd.Series.sum) / sample['weight1'].sum()) 
+        sample = pd.Series(sample_marginal_probs[key].loc[0]) 
+        target = pd.Series(target_marginal_probs[key].loc[0])
+        prob_table = pd.concat([prob_table, pd.concat([sample, target, initial], axis = 'columns')], axis = 'index')
+
+    print(f'Converged after {i} iterations. \n 
+          Marginal probability correlation: {np.corrcoef(prob_table.iloc[:,0], prob_table.iloc[:,1]) :<1.3g}')
+
+    return sample, prob_table
     
 def compute_distances(election):
     df = election['df']

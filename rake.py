@@ -1,16 +1,26 @@
 import pandas as pd
 
-states = pd.read_excel('model_data/nhgis0002_ts_nominal_state_modified.xlsx')
+#states = pd.read_excel('model_data/nhgis0002_ts_nominal_state_modified.xlsx')
 #states = states.rename(columns = dict(states.loc[0]))[1:]
-states = states.rename(columns = {'Row Source Year': 'year', 'FIPS State Code': 'fips'})
-states = states.set_index(['year', 'fips'], drop = False)
+#states = states.rename(columns = {'Row Source Year': 'year', 'FIPS State Code': 'fips'})
+#states = states.set_index(['year', 'fips'], drop = False)
+#code below was used to join the state census data with figures for state-level political partisanship
+#regress_data = pd.read_csv('model_data/regress_data.csv')
+#regress_data = regress_data.set_index(['year','fips'])
+#states.join(regress_data[['lean_prev','lean_prev2']])
+#regress_data['fips'] = regress_data['fips'].astype('float64')
+#regress_data = regress_data.set_index(['year','fips'])
+#states = states.join(regress_data[['dem_share','lean_prev','lean_prev2','hlean_prev2','hlean_prev']], how = 'outer')
+
+states = pd.read_csv('model_data/state_demographics.csv')
+states = states.set_index(['year','fips'], drop = False)
+anes_family_income = pd.read_csv('model_data/anes_income_percentiles.csv').set_index('year')
+anes_family_income = anes_family_income.drop(columns=['17','34','68','96'])
+
 #Keys from state level gis data representing variables to be used in the 
 #American National Election studies raking function
 #Note: there are other variables whose marginal probabilities may be estimated (e.g. urban/rural status),
 #but they are omitted in the function's first version
-anes_family_income = pd.read_csv('model_data/anes_income_percentiles.csv').set_index('year')
-anes_family_income = anes_family_income.drop(columns=['17','34','68','96'])
-
 census_keys =  {
     'gender': [
     "Persons: Male",
@@ -41,6 +51,8 @@ census_keys =  {
     "Families: Income $25,000 to $49,999",
     "Families: Income $50,000 or more"],
 
+    'vote': ['dem_vote_lean_prev2', 'gop_vote_lean_prev2'],
+
     #minimum range 0 and maximum range infinity dropped
      'family_income_numeric':
      [
@@ -51,9 +63,17 @@ census_keys =  {
      ]
 }
 
-#store mapping from anes keys to census keys with dictionaries relating 
-#anes categories to corresponding census categories
+#Below dict stores mapping from anes keys to census keys with dictionaries relating 
+#anes categories to corresponding census categories.
+#In order to rake sample data, each variable to rake must have a mapping
+#from the anes variable to the corresponding variable in the census data.
+#This rule applies to all variables, with the exception of family_income,
+#where the marginals are calculated in advance. 
 mapping = {
+    'vote': {
+        0: 'dem_vote_lean_prev2',
+        1: 'gop_vote_lean_prev2'
+    },
     'gender': {1: "Persons: Male",
                     2: "Persons: Female",
                     3: "Persons: Female",
@@ -166,6 +186,7 @@ mapping = {
     },
     
     'education':{
+        '8 grades or less':                         "Persons: 25 years and over ~ Less than 9th grade",
         '12 grades':                                "Persons: 25 years and over ~ 9th grade to 3 years of college (until 1980) or to some college or associate's degree (since 1990)",
         '12 grades plus non-academic training':     "Persons: 25 years and over ~ 9th grade to 3 years of college (until 1980) or to some college or associate's degree (since 1990)",
         '9-12 grades':                              "Persons: 25 years and over ~ 9th grade to 3 years of college (until 1980) or to some college or associate's degree (since 1990)",
