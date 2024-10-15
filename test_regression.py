@@ -2,9 +2,12 @@ import pandas as pd
 import numpy as np
 import statsmodels.formula.api as smf
 import statsmodels.api as sm
+from scipy.optimize import curve_fit
+from scipy.stats import norm
 #from statsmodels.regression.linear_model import OLSResults
 import os
 from code_to_category import *
+from rake import *
 import re #for format string parsing
 pd.options.mode.chained_assignment = None  # default='warn' #silence setting on copy of pandas slice warning
 
@@ -16,6 +19,8 @@ REGRESSION_OBJ_PATH = os.getcwd() + '/regression_models'
 DEFAULT_REGR = f'{REGRESSION_OBJ_PATH}/dem_model_fundamentals.pickle'
 MULT_BY_POLLS = True
 CONSTRAIN_VOTE_PROB = True #constrains vote party vote probabilities of voters so they sum to 1.0
+NORMALIZE = False
+PRINT_RAKING = False
 
 default = {}
 default['party_codes'] = {'dem':0, 'gop':1}
@@ -23,6 +28,7 @@ default['parties'] = list(default['party_codes'].keys())
 default['model'] = 'logit'
 default['year'] = 1948
 default['multi_party_mode'] = True
+default['normalize'] = NORMALIZE
 default['mult_in_dir_of_incumbency'] = [
 'rdi_yr_to_election',
 'rdi_election_year_change',
@@ -56,7 +62,7 @@ if os.path.exists(path):
 else:
     print('Error: File "regress_data.csv" not found.')
 
-def get_vars_to_norm():
+def get_vars_to_norm(PARTIES):
     vars_to_normalize = ['age',
                     'lean_prev',
                     'lean_prev2',
@@ -92,7 +98,8 @@ def initialize(election):
 
     election['df'] = df
     df = compute_distances(election)
-    df = normalize(df, get_vars_to_norm())
+    if election['normalize']:
+        df = normalize(df, get_vars_to_norm(election['parties']))
     df = add_party_codes_votes(election)
     df = add_party_vars(election)
 
@@ -143,12 +150,107 @@ def simulate_election(election, model_fundamentals_dict):
 
     return sim_df
 
-def rake(sample, target):
-    #marginal_probs = 
-    #sample_marginal_probs = 
+def norm_cdf(x, mu, sigma):
+    return norm.cdf(x, mu, sigma)
 
+def compute_marginals(year, fips, keys, df):
+    def eval(x):
+        #double brackets in df.loc[[x]] ensure that dataframe (not series) is returned
+        total = df.loc[[(x, fips)], keys].sum(axis = 'columns').reset_index(drop = True)[0]
+        return df.loc[[(x, fips)], keys].reset_index(drop = True) / total
+    
+    try:
+        return eval(year)
+    except:#linearly interpolate
+        return linear_interpolate(eval, year, df['year'])
+ 
+def linear_interpolate(fun, x, series):
+    indicies = pd.DataFrame(series.value_counts())
+    indicies['dist'] = abs(indicies.index - x)
+    neighbors = list((indicies.sort_values(by = ['dist'], ascending=True)[:2]).index)
+    x_1, x_2 = min(neighbors), max(neighbors)
+    y_1, y_2 = fun(x_1), fun(x_2)
+    return (y_2 - y_1) / (x_2 - x_1) * (x_2 - x) + y_1
 
-    pass
+def rake_state(year, code, election_df, rake_keys):
+    #return dictionary containing marginal probabilities of categories in each categorical variable
+    target_marginal_probs = {}
+    fips = code_to_fips[code]
+    for key in rake_keys:
+        key_group = census_keys[key]
+        subs = states[['year'] + key_group].dropna()
+        target_marginal_probs[key] = compute_marginals(year, fips, key_group, subs)
+                                                       
+    #fit a curve to the cdf of the logged state income distribution
+    state_bins = target_marginal_probs['family_income']
+    xlower = np.log(2000) #subtract by lower bound to increase percentage range and ensure estimation is successful 
+    def scale_income(x):
+        return np.log(x) - xlower
+    xdata = [scale_income(x) for x in census_keys['family_income_numeric']]
+    ydata = [x for x in np.cumsum(state_bins.loc[0])][:-1]#drop percentile 1.00
+    popt, pcov = curve_fit(norm_cdf, xdata, ydata)
+
+    #get state level percentiles of anes income levels
+    try:
+        anes_ranges = anes_family_income.loc[year]
+    except:
+        anes_ranges = linear_interpolate(lambda x: anes_family_income.loc[x], year, anes_family_income['year'])
+
+    percentiles = [norm_cdf(scale_income(x), popt[0], popt[1]) for x in anes_ranges] 
+    percentiles = [0] + percentiles + [1]
+    anes_codes = np.array(range(len(anes_ranges) + 1)) + 1
+    temp = {0: dict(zip(anes_codes, np.diff(percentiles)))}
+    target_marginal_probs['family_income'] = pd.DataFrame(temp).transpose()
+
+    return rake(election_df, target_marginal_probs, rake_keys)
+
+def rake(sample, target_marginal_probs, rake_keys):
+    sample_marginal_probs = {}
+    #creates dict of dataframes, each containing marginal probabilities of categories for one categorical variable
+    scalars = dict()
+    max_iter = 10
+    i = 0
+    converge = dict(zip(rake_keys, [False] * len(rake_keys)))
+    converge_thresh = 0.9975
+    corr = 0
+
+    #convert sample categories to target categories
+    sample_convert = pd.DataFrame(sample[rake_keys + ['weight1']])
+    for key in mapping.keys():#covert all columns that have mappings to census variables
+        anes_to_census = mapping[key] 
+        sample_convert[key] = sample[key].apply(lambda x: anes_to_census[x])
+
+    while i < max_iter and not all(converge.values()):
+        prob_table = pd.DataFrame()
+        for key in rake_keys:
+            #need to update sample_marginal_probs after each iteration
+            sample_marginal_probs[key] = sample_convert.groupby(key)['weight1'].agg(pd.Series.sum) / sample_convert['weight1'].sum() 
+            target = pd.Series(target_marginal_probs[key].loc[0])
+            joined = pd.concat([target, sample_marginal_probs[key]], axis = 'columns').fillna(1)
+            scalars_new = dict(joined.iloc[:,0] / joined.iloc[:,1])
+
+            #create dataframe to compute correlation between sample and target marginals
+            sample = pd.Series(sample_marginal_probs[key]) 
+            target = pd.Series(target_marginal_probs[key].loc[0])
+            prob_table = pd.concat([prob_table, pd.concat([sample, target], axis = 'columns')], axis = 'index')
+            
+            if i > 0 and corr > converge_thresh:
+                converge[key] = True
+            else:
+                scalars[key] = scalars_new
+
+            #convert anes category to census category and get corresponding scalar
+            scalar_vect = sample_convert[key].apply(lambda x: scalars_new[x])
+            sample_convert['weight1'] = sample_convert['weight1'] * scalar_vect
+
+        corr = np.corrcoef(prob_table.iloc[:,0].fillna(0), prob_table.iloc[:,1].fillna(0))[1,0]
+        i+=1
+
+    if PRINT_RAKING:
+        print(f'Converged after {i} iterations. \n' + 
+            f'Marginal probability correlation: {corr :<1.4f}')
+
+    return sample_convert
     
 def compute_distances(election):
     df = election['df']
@@ -504,15 +606,17 @@ else:
     anes['incumbency'] = anes['year'].apply(lambda x: code_to_category(x,incumbent))
     anes['vote'] = anes['vote'] - 1
     #only normalize continuous variables
-    vars_to_normalize = get_vars_to_norm()
+    vars_to_normalize = get_vars_to_norm(default['parties'])
 
     #save conversion to normalized scale
-    for var in vars_to_normalize:
-        anes[f'{var}_mean'] = np.mean(anes[var])
-        anes[f'{var}_std'] = np.std(anes[var])
+    if default['normalize']:
+        for var in vars_to_normalize:
+            anes[f'{var}_mean'] = np.mean(anes[var])
+            anes[f'{var}_std'] = np.std(anes[var])
     #save non-normalized data with means and standard deviations for use in normalize() 
     regress_data.to_csv('model_data/regress_data.csv')
-    anes = normalize(anes, vars_to_normalize)
+    if default['normalize']:
+        anes = normalize(anes, vars_to_normalize)
 
     if MULTI_PARTY_MODE:
         anes = add_party_codes_votes(default)
