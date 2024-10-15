@@ -14,6 +14,7 @@ import pandas as pd
 
 states = pd.read_csv('model_data/state_demographics.csv')
 states = states.set_index(['year','fips'], drop = False)
+states = states.sort_index(level = ['year','fips'])
 anes_family_income = pd.read_csv('model_data/anes_income_percentiles.csv').set_index('year')
 anes_family_income = anes_family_income.drop(columns=['17','34','68','96'])
 
@@ -51,7 +52,7 @@ census_keys =  {
     "Families: Income $25,000 to $49,999",
     "Families: Income $50,000 or more"],
 
-    'vote': ['dem_vote_lean_prev2', 'gop_vote_lean_prev2'],
+    'vote': ['dem_vote_lean_prev2', 'gop_vote_lean_prev2'],#['dem_vote', 'gop_vote']
 
     #minimum range 0 and maximum range infinity dropped
      'family_income_numeric':
@@ -71,14 +72,15 @@ census_keys =  {
 #where the marginals are calculated in advance. 
 mapping = {
     'vote': {
-        0: 'dem_vote_lean_prev2',
-        1: 'gop_vote_lean_prev2'
+        0: census_keys['vote'][0],#'dem_vote', #'dem_vote_lean_prev2',
+        1: census_keys['vote'][1]#'gop_vote'#'gop_vote_lean_prev2'
     },
     'gender': {1: "Persons: Male",
                     2: "Persons: Female",
                     3: "Persons: Female",
                     0: "Presons: Female"},
     'age': {
+        17: "Persons: 18-24",
         18: "Persons: 18-24",
         19: "Persons: 18-24",
         20: "Persons: 18-24",

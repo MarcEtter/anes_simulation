@@ -20,6 +20,7 @@ DEFAULT_REGR = f'{REGRESSION_OBJ_PATH}/dem_model_fundamentals.pickle'
 MULT_BY_POLLS = True
 CONSTRAIN_VOTE_PROB = True #constrains vote party vote probabilities of voters so they sum to 1.0
 NORMALIZE = False
+PRINT_RAKING = False
 
 default = {}
 default['party_codes'] = {'dem':0, 'gop':1}
@@ -210,7 +211,8 @@ def rake(sample, target_marginal_probs, rake_keys):
     max_iter = 10
     i = 0
     converge = dict(zip(rake_keys, [False] * len(rake_keys)))
-    converge_thresh = 0.95
+    converge_thresh = 0.9975
+    corr = 0
 
     #convert sample categories to target categories
     sample_convert = pd.DataFrame(sample[rake_keys + ['weight1']])
@@ -219,14 +221,20 @@ def rake(sample, target_marginal_probs, rake_keys):
         sample_convert[key] = sample[key].apply(lambda x: anes_to_census[x])
 
     while i < max_iter and not all(converge.values()):
+        prob_table = pd.DataFrame()
         for key in rake_keys:
             #need to update sample_marginal_probs after each iteration
-            sample_marginal_probs[key] = sample_convert.groupby(key)['weight1'].agg(pd.Series.sum) / sample['weight1'].sum() 
+            sample_marginal_probs[key] = sample_convert.groupby(key)['weight1'].agg(pd.Series.sum) / sample_convert['weight1'].sum() 
             target = pd.Series(target_marginal_probs[key].loc[0])
             joined = pd.concat([target, sample_marginal_probs[key]], axis = 'columns').fillna(1)
             scalars_new = dict(joined.iloc[:,0] / joined.iloc[:,1])
+
+            #create dataframe to compute correlation between sample and target marginals
+            sample = pd.Series(sample_marginal_probs[key]) 
+            target = pd.Series(target_marginal_probs[key].loc[0])
+            prob_table = pd.concat([prob_table, pd.concat([sample, target], axis = 'columns')], axis = 'index')
             
-            if i > 0 and np.corrcoef(sample_marginal_probs[key], target_marginal_probs[key].loc[0]) > converge_thresh:
+            if i > 0 and corr > converge_thresh:
                 converge[key] = True
             else:
                 scalars[key] = scalars_new
@@ -234,20 +242,15 @@ def rake(sample, target_marginal_probs, rake_keys):
             #convert anes category to census category and get corresponding scalar
             scalar_vect = sample_convert[key].apply(lambda x: scalars_new[x])
             sample_convert['weight1'] = sample_convert['weight1'] * scalar_vect
+
+        corr = np.corrcoef(prob_table.iloc[:,0].fillna(0), prob_table.iloc[:,1].fillna(0))[1,0]
         i+=1
 
-    #create table with sample and target marginal probabilities for all variables
-    prob_table = pd.DataFrame()
-    for key in rake_keys:
-        initial = pd.Series(sample.groupby(key)['weight1'].agg(pd.Series.sum) / sample['weight1'].sum()) 
-        sample = pd.Series(sample_marginal_probs[key].loc[0]) 
-        target = pd.Series(target_marginal_probs[key].loc[0])
-        prob_table = pd.concat([prob_table, pd.concat([sample, target, initial], axis = 'columns')], axis = 'index')
+    if PRINT_RAKING:
+        print(f'Converged after {i} iterations. \n' + 
+            f'Marginal probability correlation: {corr :<1.4f}')
 
-    print(f'Converged after {i} iterations. \n 
-          Marginal probability correlation: {np.corrcoef(prob_table.iloc[:,0], prob_table.iloc[:,1]) :<1.3g}')
-
-    return sample, prob_table
+    return sample_convert
     
 def compute_distances(election):
     df = election['df']
