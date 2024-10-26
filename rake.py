@@ -1,4 +1,5 @@
 import pandas as pd
+import dask.dataframe
 
 #states = pd.read_excel('model_data/nhgis0002_ts_nominal_state_modified.xlsx')
 #states = states.rename(columns = dict(states.loc[0]))[1:]
@@ -17,6 +18,11 @@ states = states.set_index(['year','fips'], drop = False)
 states = states.sort_index(level = ['year','fips'])
 anes_family_income = pd.read_csv('model_data/anes_income_percentiles.csv').set_index('year')
 anes_family_income = anes_family_income.drop(columns=['17','34','68','96'])
+
+print('Reading county_demographics.csv...')
+counties = pd.read_csv('model_data/county_demographics.csv')
+counties = counties.set_index(['year','fips'], drop = False)
+counties = counties.sort_index(level = ['year','fips'])
 
 #Keys from state level gis data representing variables to be used in the 
 #American National Election studies raking function
