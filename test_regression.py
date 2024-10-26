@@ -172,35 +172,35 @@ def linear_interpolate(fun, x, series):
     y_1, y_2 = fun(x_1), fun(x_2)
     return (y_2 - y_1) / (x_2 - x_1) * (x_2 - x) + y_1
 
-def rake_state(year, code, election_df, rake_keys):
+def rake_state(year, fips, election_df, rake_keys):
     #return dictionary containing marginal probabilities of categories in each categorical variable
     target_marginal_probs = {}
-    fips = code_to_fips[code]
     for key in rake_keys:
         key_group = census_keys[key]
         subs = states[['year'] + key_group].dropna()
         target_marginal_probs[key] = compute_marginals(year, fips, key_group, subs)
-                                                       
-    #fit a curve to the cdf of the logged state income distribution
-    state_bins = target_marginal_probs['family_income']
-    xlower = np.log(2000) #subtract by lower bound to increase percentage range and ensure estimation is successful 
-    def scale_income(x):
-        return np.log(x) - xlower
-    xdata = [scale_income(x) for x in census_keys['family_income_numeric']]
-    ydata = [x for x in np.cumsum(state_bins.loc[0])][:-1]#drop percentile 1.00
-    popt, pcov = curve_fit(norm_cdf, xdata, ydata)
 
-    #get state level percentiles of anes income levels
-    try:
-        anes_ranges = anes_family_income.loc[year]
-    except:
-        anes_ranges = linear_interpolate(lambda x: anes_family_income.loc[x], year, anes_family_income['year'])
+    if 'family_income' in rake_keys:                                                   
+        #fit a curve to the cdf of the logged state income distribution
+        state_bins = target_marginal_probs['family_income']
+        xlower = np.log(2000) #subtract by lower bound to increase percentage range and ensure estimation is successful 
+        def scale_income(x):
+            return np.log(x) - xlower
+        xdata = [scale_income(x) for x in census_keys['family_income_numeric']]
+        ydata = [x for x in np.cumsum(state_bins.loc[0])][:-1]#drop percentile 1.00
+        popt, pcov = curve_fit(norm_cdf, xdata, ydata)
 
-    percentiles = [norm_cdf(scale_income(x), popt[0], popt[1]) for x in anes_ranges] 
-    percentiles = [0] + percentiles + [1]
-    anes_codes = np.array(range(len(anes_ranges) + 1)) + 1
-    temp = {0: dict(zip(anes_codes, np.diff(percentiles)))}
-    target_marginal_probs['family_income'] = pd.DataFrame(temp).transpose()
+        #get state level percentiles of anes income levels
+        try:
+            anes_ranges = anes_family_income.loc[year]
+        except:
+            anes_ranges = linear_interpolate(lambda x: anes_family_income.loc[x], year, anes_family_income['year'])
+
+        percentiles = [norm_cdf(scale_income(x), popt[0], popt[1]) for x in anes_ranges] 
+        percentiles = [0] + percentiles + [1]
+        anes_codes = np.array(range(len(anes_ranges) + 1)) + 1
+        temp = {0: dict(zip(anes_codes, np.diff(percentiles)))}
+        target_marginal_probs['family_income'] = pd.DataFrame(temp).transpose()
 
     return rake(election_df, target_marginal_probs, rake_keys)
 
@@ -215,7 +215,7 @@ def rake(sample, target_marginal_probs, rake_keys):
     corr = 0
 
     #convert sample categories to target categories
-    sample_convert = pd.DataFrame(sample[rake_keys + ['weight1']])
+    sample_convert = sample.copy() #pd.DataFrame(sample[rake_keys + ['weight1']])
     for key in mapping.keys():#covert all columns that have mappings to census variables
         anes_to_census = mapping[key] 
         sample_convert[key] = sample[key].apply(lambda x: anes_to_census[x])

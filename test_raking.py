@@ -11,6 +11,9 @@ import pandas as pd
 
 regress_data = pd.read_csv('model_data/regression_data_altered.csv')
 regress_data = regress_data.set_index(['year','state'])
+#code for determining average ideology of state electorates over time
+cand_positions = pd.read_csv('model_data/candidate_positions_unweighted.csv')
+cand_positions = cand_positions.set_index('year')
 
 for yr in range(1972,2000,4):
     df_yr = pd.read_csv('model_data/simulation_data.csv')
@@ -21,15 +24,38 @@ for yr in range(1972,2000,4):
     #Find weights of each respondent within state by raking
     state_pop = states[['year','Persons: Total']].dropna()
     state_df = dict()
-    population = dict()
+    total_votes = dict()
+
     for state in state_postal_codes:
-        state_df[state] = rake_state(yr, state, df_yr, rake_keys)
+        fips = code_to_fips[state]
+        state_df[state] = rake_state(yr, fips, df_yr, rake_keys)
+        print(f'raked ({yr},{state})')
         df = state_df[state]
-        def eval(x):
-            fips = code_to_fips[state]
-            return state_pop.loc[(x,fips), 'Persons: Total'].values[0] / 10**6
-        population[state] = linear_interpolate(eval, yr, state_pop['year'])
-        state_weights[f'{state}_weight1'] = df['weight1'] * population[state]
+        
+        #code for determining average ideology of state electorates over time
+        state_ideo = sum(df['ideology'] * df['weight1']) / sum(df['weight1'])
+        regress_data.loc[(yr,state), 'ideology'] = state_ideo
+
+        diff_dem = abs(state_ideo - cand_positions.loc[yr,'dem_ideo'])
+        diff_gop = abs(state_ideo - cand_positions.loc[yr,'gop_ideo'])
+
+        if incumbent[yr] == 0:#dem
+            regress_data.loc[(yr,state), 'ideo_inc_unweighted'] = cand_positions.loc[yr,'dem_ideo'] 
+            regress_data.loc[(yr,state), 'ideo_noninc_unweighted'] = cand_positions.loc[yr,'gop_ideo'] 
+            regress_data.loc[(yr,state), 'inc_minus_noninc_new'] = diff_dem - diff_gop
+        elif incumbent[yr] == 1:#gop
+            regress_data.loc[(yr,state), 'ideo_inc_unweighted'] = cand_positions.loc[yr,'gop_ideo'] 
+            regress_data.loc[(yr,state), 'ideo_noninc_unweighted'] = cand_positions.loc[yr,'dem_ideo'] 
+            regress_data.loc[(yr,state), 'inc_minus_noninc_new'] = diff_gop - diff_dem 
+
+        if state == 'AK':#workaround for the absence of alaska in the county data
+            def eval(x):
+                return state_pop.loc[(x,fips), 'Persons: Total'].values[0] / 10**6 * 0.425
+            total_votes[state] = linear_interpolate(eval, yr, state_pop['year'])
+        else:
+            total_votes[state] = states.loc[(yr,fips), 'total_votes'].values[0] / 10**6 * 0.6
+
+        state_weights[f'{state}_weight1'] = df['weight1'] * total_votes[state]
         print('.', end = '')
 
     natl_weights = state_weights.mean(axis = 'columns')
@@ -55,10 +81,10 @@ for yr in range(1972,2000,4):
         state_target_marginals[state] = pd.concat([adj_share, unadj_share])
 
     state_votes = pd.DataFrame(state_target_marginals).transpose()
-    state_votes['population'] = pd.Series(population)
+    state_votes['total_votes'] = pd.Series(total_votes)
     dem_key, gop_key = census_keys['vote'][0], census_keys['vote'][1]
-    gop_vote = (sum(state_votes['population'] * state_votes[gop_key])) / state_votes['population'].sum()
-    dem_vote = (sum(state_votes['population'] * state_votes[dem_key])) / state_votes['population'].sum()
+    gop_vote = (sum(state_votes['total_votes'] * state_votes[gop_key])) / state_votes['total_votes'].sum()
+    dem_vote = (sum(state_votes['total_votes'] * state_votes[dem_key])) / state_votes['total_votes'].sum()
     total_votes = pd.Series({dem_key: dem_vote, gop_key: gop_vote})
     error = np.mean(abs(total_votes - target_marginal_probs['vote']))
 
