@@ -58,7 +58,9 @@ census_keys =  {
     "Families: Income $25,000 to $49,999",
     "Families: Income $50,000 or more"],
 
-    'vote': ['dem_vote_lean_prev2', 'gop_vote_lean_prev2'],#['dem_vote', 'gop_vote']
+    'vote': ['dem_lean2_plus_poll', 'gop_lean2_plus_poll'],
+    #['dem_vote_lean_prev2', 'gop_vote_lean_prev2'],
+    #['dem_vote', 'gop_vote']
 
     #minimum range 0 and maximum range infinity dropped
      'family_income_numeric':
