@@ -1,17 +1,4 @@
 import pandas as pd
-import dask.dataframe
-
-#states = pd.read_excel('model_data/nhgis0002_ts_nominal_state_modified.xlsx')
-#states = states.rename(columns = dict(states.loc[0]))[1:]
-#states = states.rename(columns = {'Row Source Year': 'year', 'FIPS State Code': 'fips'})
-#states = states.set_index(['year', 'fips'], drop = False)
-#code below was used to join the state census data with figures for state-level political partisanship
-#regress_data = pd.read_csv('model_data/regress_data.csv')
-#regress_data = regress_data.set_index(['year','fips'])
-#states.join(regress_data[['lean_prev','lean_prev2']])
-#regress_data['fips'] = regress_data['fips'].astype('float64')
-#regress_data = regress_data.set_index(['year','fips'])
-#states = states.join(regress_data[['dem_share','lean_prev','lean_prev2','hlean_prev2','hlean_prev']], how = 'outer')
 
 states = pd.read_csv('model_data/state_demographics.csv')
 states = states.set_index(['year','fips'], drop = False)
@@ -19,10 +6,12 @@ states = states.sort_index(level = ['year','fips'])
 anes_family_income = pd.read_csv('model_data/anes_income_percentiles.csv').set_index('year')
 anes_family_income = anes_family_income.drop(columns=['17','34','68','96'])
 
-print('Reading county_demographics.csv...')
-counties = pd.read_csv('model_data/county_demographics.csv')
-counties = counties.set_index(['year','fips'], drop = False)
-counties = counties.sort_index(level = ['year','fips'])
+def read_counties():
+    print('Reading county_demographics.csv...')
+    counties = pd.read_csv('model_data/county_demographics.csv')
+    counties = counties.set_index(['year','fips'], drop = False)
+    counties = counties.sort_index(level = ['year','fips'])
+    print('Finished reading county_demographics.csv.')
 
 #Keys from state level gis data representing variables to be used in the 
 #American National Election studies raking function
@@ -58,7 +47,9 @@ census_keys =  {
     "Families: Income $25,000 to $49,999",
     "Families: Income $50,000 or more"],
 
-    'vote': ['dem_vote_lean_prev2', 'gop_vote_lean_prev2'],#['dem_vote', 'gop_vote']
+    'vote': ['dem_lean2_plus_poll', 'gop_lean2_plus_poll'],
+    #['dem_vote_lean_prev2', 'gop_vote_lean_prev2'],
+    #['dem_vote', 'gop_vote']
 
     #minimum range 0 and maximum range infinity dropped
      'family_income_numeric':
