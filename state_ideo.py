@@ -1,6 +1,41 @@
 from code_to_category import *
 from test_regression import * 
 import plotly.express as px
+import matplotlib.pyplot as plt
+import seaborn as sns 
+
+"""
+#*************Measures of Candidate Ideology**************
+#*******************and Relative Extremism*****************
+#'spliced_BPHI_inc' 
+#'spliced_BPHI_noninc' 
+#ideology measure of Cohen et al. (2016), where
+#ideology of the incumbent and nonincumbent
+#is the average rating of "high-info" ANES respondents
+
+#'inc_ideo'
+#'noninc_ideo'
+#ideology of the incumbent and nonincumbent
+#is given by average rating of all ANES respondents
+
+#'inc_minus_noninc_new'
+#difference in candidate distance from the ideology
+#of each state electorate, where candidate ideologies
+#are 'inc_ideo' and 'noninc_ideo', and state electorate
+#ideologies are determined by computing the mean ideology
+#of the ANES survey weighted by partisanship, for each
+#state and presidential election.
+
+#'berry_inc_minus_noninc_citizen'
+#difference in candidate distance from the ideology
+#of each state electorate, where candidate ideologies
+#are 'spliced_BPHI_inc' and 'spliced_BPHI_noninc', 
+#and state electorate ideologies are determined by 
+#the state ideology ratings in Berry et al. (1997).
+#Candidate ideology measures are first normalized to the mean and
+#standard deviation of the Berry measure and their 
+#absolute differences from the Berry measure are subtracted.
+"""
 
 OVERWRITE = False
 WIDTH = 60
@@ -44,10 +79,76 @@ if OVERWRITE:
     regress_data = regress_data.join(states_temp['total_votes_two_party'])
     regress_data = regress_data.join(fundamentals['IncumbentPartyMidterm'])
     regress_data = regress_data.join(gallup)
+    
+    def tabulate_ideo(yr, state, state_ideo):
+        diff_dem = abs(state_ideo - cand_positions.loc[yr,'dem_ideo'])
+        diff_gop = abs(state_ideo - cand_positions.loc[yr,'gop_ideo']) 
+        #diff_dem = abs(state_ideo - 3.5 - fundamentals.loc[yr, 'spliced.BPHI.dem'])
+        #diff_gop = abs(state_ideo - 3.5 - fundamentals.loc[yr, 'spliced.BPHI.rep'])
+
+        regress_data.loc[(yr,state), 'raked_dem_dist'] = diff_dem
+        regress_data.loc[(yr,state), 'raked_gop_dist'] = diff_gop
+
+        spliced_BPHI_inc = regress_data.loc[(yr,state), 'spliced_BPHI_inc'] 
+        spliced_BPHI_noninc = regress_data.loc[(yr,state), 'spliced_BPHI_noninc']
+        berry_ideo = regress_data.loc[(yr,state), 'berry_citizen']
+
+        if incumbent[yr] == 0:#dem
+            regress_data.loc[(yr,state), 'inc_ideo'] = cand_positions.loc[yr,'dem_ideo']
+            regress_data.loc[(yr,state), 'noninc_ideo'] = cand_positions.loc[yr,'gop_ideo']
+            regress_data.loc[(yr,state), 'ideo_inc_unweighted'] = cand_positions.loc[yr,'dem_ideo'] 
+            regress_data.loc[(yr,state), 'ideo_noninc_unweighted'] = cand_positions.loc[yr,'gop_ideo'] 
+            ##New measure of relative extremity
+            regress_data.loc[(yr,state), 'inc_minus_noninc_new'] = diff_dem - diff_gop
+
+            regress_data.loc[(yr,state), 'raked_inc_dist'] = abs(state_ideo - cand_positions.loc[yr,'dem_ideo'])
+            regress_data.loc[(yr,state), 'raked_noninc_dist'] = abs(state_ideo - cand_positions.loc[yr,'gop_ideo'])
+
+            regress_data.loc[(yr,state), 'berry_dem_dist'] = abs(berry_ideo - spliced_BPHI_inc)
+            regress_data.loc[(yr,state), 'berry_gop_dist'] = abs(berry_ideo - spliced_BPHI_noninc)
+
+            regress_data.loc[(yr,state),'inc_poll'] = regress_data.loc[(yr,state),'dem_poll']
+            regress_data.loc[(yr,state),'dem_candidate'] = regress_data.loc[(yr,state),'inc_candidate'][:-5]
+            regress_data.loc[(yr,state),'gop_candidate'] = regress_data.loc[(yr,state),'noninc_candidate'][:-5]
+
+        elif incumbent[yr] == 1:#gop
+            regress_data.loc[(yr,state), 'inc_ideo'] = cand_positions.loc[yr,'gop_ideo']
+            regress_data.loc[(yr,state), 'noninc_ideo'] = cand_positions.loc[yr,'dem_ideo']
+            regress_data.loc[(yr,state), 'ideo_inc_unweighted'] = cand_positions.loc[yr,'gop_ideo'] 
+            regress_data.loc[(yr,state), 'ideo_noninc_unweighted'] = cand_positions.loc[yr,'dem_ideo'] 
+            ##New measure of relative extremity
+            regress_data.loc[(yr,state), 'inc_minus_noninc_new'] = diff_gop - diff_dem 
+
+            regress_data.loc[(yr,state), 'raked_inc_dist'] = abs(state_ideo - cand_positions.loc[yr,'gop_ideo'])
+            regress_data.loc[(yr,state), 'raked_noninc_dist'] = abs(state_ideo - cand_positions.loc[yr,'dem_ideo'])
+
+            regress_data.loc[(yr,state), 'berry_dem_dist'] = abs(berry_ideo - spliced_BPHI_noninc)
+            regress_data.loc[(yr,state), 'berry_gop_dist'] = abs(berry_ideo - spliced_BPHI_inc)
+
+            regress_data.loc[(yr,state),'inc_poll'] = regress_data.loc[(yr,state),'gop_poll']
+            regress_data.loc[(yr,state),'dem_candidate'] = regress_data.loc[(yr,state),'noninc_candidate'][:-5]
+            regress_data.loc[(yr,state),'gop_candidate'] = regress_data.loc[(yr,state),'inc_candidate'][:-5]
+
+        regress_data.loc[(yr,state), 'berry_inc_dist'] = abs(spliced_BPHI_inc - berry_ideo)
+        regress_data.loc[(yr,state), 'berry_noninc_dist'] = abs(spliced_BPHI_noninc - berry_ideo)
+        
+        if state == 'AK':#workaround for the absence of alaska in the county data
+            def eval(x):
+                return state_pop.loc[(x,fips), 'Persons: Total'].values[0] / 10**6 * 0.425
+            total_votes[state] = linear_interpolate(eval, yr, state_pop['year'])
+
+            regress_data.loc[(yr,state),'total_votes_two_party'] = int(linear_interpolate(eval, yr, state_pop['year']) * 10**6)
+        else:
+            total_votes[state] = states.loc[(yr,fips), 'total_votes'].values[0] / 10**6 * 0.6
+
+        state_weights[f'{state}_weight1'] = df['weight1'] * total_votes[state]
+
+        #print('.', end = '')
 
     for yr in yr_range:
         df_yr = pd.read_csv('model_data/simulation_data.csv')
         df_yr = df_yr[df_yr['year'] == yr]
+
         #rake_keys = list(census_keys.keys())[:-1]
         rake_keys = ['vote']
         state_weights = pd.DataFrame()
@@ -58,7 +159,7 @@ if OVERWRITE:
         total_votes = dict()
 
         print(f'raked ({yr})')
-        for state in state_postal_codes :
+        for state in state_postal_codes:
             fips = code_to_fips[state]
             state_df[state] = rake_state(yr, fips, df_yr, rake_keys)
             #print(f'raked ({yr},{state})')
@@ -73,63 +174,19 @@ if OVERWRITE:
                 cand_positions.loc[yr,'dem_ideo'] = 0
                 cand_positions.loc[yr,'gop_ideo'] = 0
 
-            diff_dem = abs(state_ideo - cand_positions.loc[yr,'dem_ideo'])
-            diff_gop = abs(state_ideo - cand_positions.loc[yr,'gop_ideo']) 
-            #diff_dem = abs(state_ideo - 3.5 - fundamentals.loc[yr, 'spliced.BPHI.dem'])
-            #diff_gop = abs(state_ideo - 3.5 - fundamentals.loc[yr, 'spliced.BPHI.rep'])
+            tabulate_ideo(yr, state, state_ideo)
 
-            regress_data.loc[(yr,state), 'raked_dem_dist'] = diff_dem
-            regress_data.loc[(yr,state), 'raked_gop_dist'] = diff_gop
-
-            spliced_BPHI_inc = regress_data.loc[(yr,state), 'spliced_BPHI_inc'] 
-            spliced_BPHI_noninc = regress_data.loc[(yr,state), 'spliced_BPHI_noninc']
-            berry_ideo = regress_data.loc[(yr,state), 'berry_citizen']
-
-            if incumbent[yr] == 0:#dem
-                regress_data.loc[(yr,state), 'ideo_inc_unweighted'] = cand_positions.loc[yr,'dem_ideo'] 
-                regress_data.loc[(yr,state), 'ideo_noninc_unweighted'] = cand_positions.loc[yr,'gop_ideo'] 
-                regress_data.loc[(yr,state), 'inc_minus_noninc_new'] = diff_dem - diff_gop
-
-                regress_data.loc[(yr,state), 'raked_inc_dist'] = abs(state_ideo - cand_positions.loc[yr,'dem_ideo'])
-                regress_data.loc[(yr,state), 'raked_noninc_dist'] = abs(state_ideo - cand_positions.loc[yr,'gop_ideo'])
-
-                regress_data.loc[(yr,state), 'berry_dem_dist'] = abs(berry_ideo - spliced_BPHI_inc)
-                regress_data.loc[(yr,state), 'berry_gop_dist'] = abs(berry_ideo - spliced_BPHI_noninc)
-
-                regress_data.loc[(yr,state),'inc_poll'] = regress_data.loc[(yr,state),'dem_poll']
-                regress_data.loc[(yr,state),'dem_candidate'] = regress_data.loc[(yr,state),'inc_candidate'][:-5]
-                regress_data.loc[(yr,state),'gop_candidate'] = regress_data.loc[(yr,state),'noninc_candidate'][:-5]
-
-            elif incumbent[yr] == 1:#gop
-                regress_data.loc[(yr,state), 'ideo_inc_unweighted'] = cand_positions.loc[yr,'gop_ideo'] 
-                regress_data.loc[(yr,state), 'ideo_noninc_unweighted'] = cand_positions.loc[yr,'dem_ideo'] 
-                regress_data.loc[(yr,state), 'inc_minus_noninc_new'] = diff_gop - diff_dem 
-
-                regress_data.loc[(yr,state), 'raked_inc_dist'] = abs(state_ideo - cand_positions.loc[yr,'gop_ideo'])
-                regress_data.loc[(yr,state), 'raked_noninc_dist'] = abs(state_ideo - cand_positions.loc[yr,'dem_ideo'])
-
-                regress_data.loc[(yr,state), 'berry_dem_dist'] = abs(berry_ideo - spliced_BPHI_noninc)
-                regress_data.loc[(yr,state), 'berry_gop_dist'] = abs(berry_ideo - spliced_BPHI_inc)
-
-                regress_data.loc[(yr,state),'inc_poll'] = regress_data.loc[(yr,state),'gop_poll']
-                regress_data.loc[(yr,state),'dem_candidate'] = regress_data.loc[(yr,state),'noninc_candidate'][:-5]
-                regress_data.loc[(yr,state),'gop_candidate'] = regress_data.loc[(yr,state),'inc_candidate'][:-5]
-
-            regress_data.loc[(yr,state), 'berry_inc_dist'] = abs(spliced_BPHI_inc - berry_ideo)
-            regress_data.loc[(yr,state), 'berry_noninc_dist'] = abs(spliced_BPHI_noninc - berry_ideo)
+        #tabulate values for the USA to investigate trends at the national level
+        state = 'USA'
+        try:
+            state_ideo = sum(df_yr['ideology'] * df_yr['weight1']) / sum(df_yr['weight1'])
+            regress_data.loc[(yr,state), 'ideology'] = state_ideo
+        except:
+            regress_data.loc[(yr,state), 'ideology'] = 0
+            cand_positions.loc[yr,'dem_ideo'] = 0
+            cand_positions.loc[yr,'gop_ideo'] = 0
             
-            if state == 'AK':#workaround for the absence of alaska in the county data
-                def eval(x):
-                    return state_pop.loc[(x,fips), 'Persons: Total'].values[0] / 10**6 * 0.425
-                total_votes[state] = linear_interpolate(eval, yr, state_pop['year'])
-
-                regress_data.loc[(yr,state),'total_votes_two_party'] = int(linear_interpolate(eval, yr, state_pop['year']) * 10**6)
-            else:
-                total_votes[state] = states.loc[(yr,fips), 'total_votes'].values[0] / 10**6 * 0.6
-
-            state_weights[f'{state}_weight1'] = df['weight1'] * total_votes[state]
-
-            #print('.', end = '')
+        tabulate_ideo(yr, state, state_ideo)
     
     norm_berry_gop_dist = (regress_data['berry_gop_dist'] - np.mean(regress_data['berry_gop_dist'])) 
     norm_berry_gop_dist /= np.std(regress_data['berry_gop_dist'])
@@ -139,9 +196,6 @@ if OVERWRITE:
 
     regress_data.to_csv('out/regress_data_state_ideo.csv')
 
-regress_data = pd.read_csv('out/regress_data_state_ideo.csv')
-regress_data = regress_data[regress_data['state'] != 'USA']
-
 def predict_fn(predict, test_data):
     raked_corr = pd.DataFrame(predict['inc_share']).corrwith(predict['inc_minus_noninc_new'])[0]
     berry_corr = pd.DataFrame(predict['inc_share']).corrwith(predict['berry_inc_minus_noninc_citizen'])[0]
@@ -150,9 +204,9 @@ def predict_fn(predict, test_data):
     #regression_str = "inc_share ~ inc_poll + inc_pres + inc_lean_prev + inc_lean_prev2 + inc_hshare_prev + inc_hlean_prev + rdi_yr_to_election + inflation_yoy + inc_tenure + inc_home_state + noninc_home_state "
     #regression_str = "inc_share ~ inc_poll + inc_lean_prev2 + inc_lean_prev + rdi_yr_to_election + inflation_yoy + inc_tenure"
     model_berry = smf.ols(regression_str, predict).fit()
-    #regression_str = "inc_share ~ inc_minus_noninc_new + inc_pres + inc_lean_prev + inc_lean_prev2 + inc_hshare_prev + inc_hlean_prev + rdi_yr_to_election + inflation_yoy + inc_tenure + inc_home_state + noninc_home_state "
+    regression_str = "inc_share ~ inc_minus_noninc_new + inc_pres + inc_lean_prev + inc_lean_prev2 + inc_hshare_prev + inc_hlean_prev + rdi_yr_to_election + inflation_yoy + inc_tenure + inc_home_state + noninc_home_state "
     #regression_str = "inc_share ~ inc_poll + inc_pres + inc_lean_prev2 + inc_lean_prev + rdi_yr_to_election + inflation_yoy + inc_hshare_prev + inc_hlean_prev + inc_tenure + IncumbentPartyMidterm"
-    regression_str = "inc_share ~ inc_poll + inc_pres + inc_lean_prev + inc_lean_prev2 + inc_hshare_prev + inc_hlean_prev + rdi_yr_to_election + inflation_yoy + inc_tenure + inc_home_state + noninc_home_state "
+    #regression_str = "inc_share ~ inc_poll + inc_pres + inc_lean_prev + inc_lean_prev2 + inc_hshare_prev + inc_hlean_prev + rdi_yr_to_election + inflation_yoy + inc_tenure + inc_home_state + noninc_home_state "
     model_raked = smf.ols(regression_str, predict).fit()
 
     test_data[f'berry_pred_inc_share'] = model_berry.predict(test_data)
@@ -218,12 +272,12 @@ def evaluate():
     test_data_concat['winner'] = test_data_concat['raked_pred_dem'].apply(lambda x: 'dem' if x > 0.5 else 'gop')
     test_data_concat.to_csv('out/state_predictions.csv')
 
-    print(f'{"-"*int(WIDTH/2.5)}Average Accuracy in range {min(yr_range)}-{max(yr_range)}{"-"*int(WIDTH/2.5)}')
-    print()
-    print(f'{"States correctly called (berry):":<{WIDTH}}'+
-          f'{np.mean(test_data_concat["berry_state_correct"]) :> 1.1%}')
-    print(f'{"States correctly called (raked):":<{WIDTH}}' + 
-          f'{np.mean(test_data["raked_state_correct"]) :> 1.1%}')
+    #print(f'{"-"*int(WIDTH/2.5)}Average Accuracy in range {min(yr_range)}-{max(yr_range)}{"-"*int(WIDTH/2.5)}')
+    #print()
+    #print(f'{"States correctly called (berry):":<{WIDTH}}'+
+    #      f'{np.mean(test_data_concat["berry_state_correct"]) :> 1.1%}')
+    #print(f'{"States correctly called (raked):":<{WIDTH}}' + 
+    #      f'{np.mean(test_data["raked_state_correct"]) :> 1.1%}')
 
     print(f'{"-"*int(WIDTH/2.5)}Overall Accuracy in range {min(yr_range)}-{max(yr_range)}{"-"*int(WIDTH/2.5)}')
     print()
@@ -249,12 +303,12 @@ def show(df):
         #color="berry_citizen",
         #color_discrete_map= {"dem": "blue",
         #                     "gop": "red"},
-        #color_continuous_scale=["red", "blue"],
+        color_continuous_scale=["red", "blue"],
         #color_continuous_scale=["blue", "red"],
         range_color = [0.48,0.52],
         scope="usa",
         labels={"raked_pred_dem": "Democratic 2-party Vote"},
-        labels={"ideology": "ideology"},
+        #labels={"ideology": "ideology"},
         title = f"<span style='font-size: 24px;'>{int(df['year'].mean())} Predicted Vote Share</span>" \
         f"<br><sup><span style='font-size: 16px;'>Popular Vote (D-R): {dem_npv :> 2.1%}-{gop_npv :> 2.1%}</span></sup>" \
         f"<br><sup><span style='font-size: 16px;'>Electoral Vote (D-R): {dem_evs}-{gop_evs}</span></sup>"
@@ -262,7 +316,48 @@ def show(df):
 
     fig.show()
 
+regress_data = pd.read_csv('out/regress_data_state_ideo.csv')
+##plot regression of difference in difference at national level against incumbent npv
+npv = regress_data[regress_data['state'] == 'USA']
+npv = npv[npv['year'] >= 1972]
+npv = npv[npv['year'] <= 2012]#restrict to range defined for all measures
+
+#compute measure of relative extremism by comparing candidates' distances from ideology 3.5
+diff_diff_center = pd.Series(abs(npv['inc_ideo'] - 3.5) - abs(npv['noninc_ideo'] - 3.5))
+#compute measure of relative extremism from cohen et al. (2016)
+diff_diff_cohen = pd.Series(abs(npv['spliced_BPHI_inc']) - abs(npv['spliced_BPHI_noninc']))
+
+#correlation of measure of relative extremism computed by subtracting average ratings
+#of candidate extremism from 3.5
+corr_ideo = np.corrcoef(npv['inc_share'], diff_diff_center)[0,1] 
+corr_cohen = np.corrcoef(npv['inc_share'], diff_diff_cohen)[0,1] #correlation of cohen et al measure of relative extremism (check this)
+corr_new = np.corrcoef(npv['inc_minus_noninc_new'], npv['inc_share'])[0,1]
+
+
+"""
+sns.regplot(x=npv['inc_minus_noninc_new'], y=npv['inc_share'], scatter_kws={"color": "blue"}, line_kws={"color": "red"})
+plt.title("Extremism and Incumbent Vote Share")
+plt.xlabel("Relative Extremism")
+plt.ylabel("Incumbent NPV Share")
+plt.grid(True)
+plt.show()
+
+sns.regplot(x= diff_diff_center, y=npv['inc_share'], scatter_kws={"color": "blue"}, line_kws={"color": "red"})
+plt.title("Extremism and Incumbent Vote Share (Centered)")
+plt.xlabel("Relative Extremism")
+plt.ylabel("Incumbent NPV Share")
+plt.grid(True)
+plt.show()
+"""
+
+regress_data = regress_data[regress_data['state'] != 'USA']
 test_data_concat = evaluate()
 show(test_data_concat[test_data_concat['year'] == 2024])
 
-
+print()
+print('-----------NPV Correlation with Select Extremism Measures-----------')
+print()
+print(f'State Extremism Correlation (Respondent Average Rating):       {corr_new :< 1.3f}')
+print(f'Centered Extremism Correlation (Respondent Average Rating):    {corr_ideo :< 1.3f}')
+print(f'Centered Extremism Correlation (Cohen Spliced Rating):         {corr_cohen :< 1.3f}')
+print()
