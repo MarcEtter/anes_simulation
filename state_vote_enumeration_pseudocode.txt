@@ -1,0 +1,20 @@
+row normalization -
+No row normalization -
+Per previous method, adjusting the weights so that they sum to the national weights will change the weighted distributions of demographics anyway, as well as the number of votes cast in each state
+
+#assume that vote totals of each candidate have already been computed
+candidate_sum = [np.sum(natl_df['candidate']) for candidate in candidates]
+nr_of_votes = state_turnout / np.sum(df['weight1'])
+
+region_coeffs = [0]*nr_candidates#regional coefficients for each candidate
+for state in states:
+  [df['candidate'] *= region_coeffs['candidate'] for candidate in candidates]
+
+state_sum = [0]*nr_candidates
+for state in states:
+  [state_sum['candidate'] += np.sum(dfs['state']['candidate']) for candidate in candidates]
+
+candidate_scalars = [candidate_sum['candidate'] / state_sum['candidate'] for candidate in candidates]
+
+for state in states:
+  [df['candidate'] *= candidate_scalars['candidate'] for candidate in candidates]

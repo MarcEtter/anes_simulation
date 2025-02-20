@@ -2,7 +2,7 @@ import pandas as pd
 
 states = pd.read_csv('model_data/state_demographics.csv')
 states = states.set_index(['year','fips'], drop = False)
-states = states.sort_index(level = ['year','fips'])
+#states = states.sort_index(level = ['year','fips'])
 anes_family_income = pd.read_csv('model_data/anes_income_percentiles.csv').set_index('year')
 anes_family_income = anes_family_income.drop(columns=['17','34','68','96'])
 
@@ -47,8 +47,8 @@ census_keys =  {
     "Families: Income $25,000 to $49,999",
     "Families: Income $50,000 or more"],
 
-    'vote': ['dem_lean2_plus_poll', 'gop_lean2_plus_poll'],
-    #['dem_vote_lean_prev2', 'gop_vote_lean_prev2'],
+    'vote': #['dem_lean2_plus_poll', 'gop_lean2_plus_poll'],
+    ['dem_vote_lean_prev2', 'gop_vote_lean_prev2'],
     #['dem_vote', 'gop_vote']
 
     #minimum range 0 and maximum range infinity dropped
