@@ -107,7 +107,7 @@ def predict(yr):
     unadj_mae = np.mean(abs(joined['dem_share'] - joined[f'unadj_{dem_key}']))
     corr = np.corrcoef(joined['dem_share'], joined[dem_key])[0,1]
     unadj_corr = np.corrcoef(joined['dem_share'], joined[f'unadj_{dem_key}'])[0,1]
-    print(f'{yr} ~ Adjusted Correlation: {mae :<1.3f}, Unadjusted: {unadj_mae:<1.3f}' +
+    print(f'{yr} ~ Adjusted Mean Avg Error: {mae :<1.3f}, Unadjusted: {unadj_mae:<1.3f}' +
           f', OLS: {model_mae :<1.3f}')
     
     return joined[['year.1','state.1',dem_key,f'unadj_{dem_key}','dem_share']]
