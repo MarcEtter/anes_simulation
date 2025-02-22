@@ -27,7 +27,7 @@ default['party_codes'] = {'dem':0, 'gop':1}
 default['parties'] = list(default['party_codes'].keys())
 default['model'] = 'logit'
 default['year'] = 1948
-default['multi_party_mode'] = True
+default['multi_party_mode'] = False
 default['normalize'] = NORMALIZE
 default['mult_in_dir_of_incumbency'] = [
 'rdi_yr_to_election',
@@ -387,7 +387,7 @@ def append_accuracy(df, summary, election):
     gop_share = np.sum(df['pred_vote_prob']*df['weight1']) / np.sum(df['weight1'])
     survey_gop_share = np.sum(df['vote']*df['weight1']) / np.sum(df['weight1'])
     real_gop_share = 0
-    YEAR = election['YEAR']
+    YEAR = election['year']
     if YEAR != 0:
         real_gop_share = 1 - regress_data.loc[(YEAR,'USA'),'dem_share']
     accuracy = np.mean(df['correct'])
@@ -399,7 +399,7 @@ def append_accuracy(df, summary, election):
     return summary
 
 def append_params(model, summary, election):
-    YEAR = election['YEAR']
+    YEAR = election['year']
     summary['params'] += f'|{YEAR: <6}|'
     for param in model.params.values:
         summary['params'] += f'{param :<{FIELD_WIDTH}.3f}|'
@@ -416,7 +416,8 @@ def print_params(model = None, summary = None, title = ''):
     print(table)
 
 def print_accuracy(summary = None, title = ''):
-    col_names = ['Year', 'Accuracy', 'Republican pred vote', 'Democratic pred vote', 'Republican vote (survey)', 'Republican vote (actual)']
+    col_names = summary['colnames']
+    #col_names = ['Year', 'Accuracy', 'Republican pred vote', 'Democratic pred vote', 'Republican vote (survey)', 'Republican vote (actual)']
     widths = list([YEAR_WIDTH])
     [widths.append(FIELD_WIDTH) for x in range(len(col_names) -1)]
     table = append_header(col_names, widths, title, summary['accuracy'])
@@ -631,7 +632,13 @@ else:
 
     df_fundamentals = anes[anes['year']>1968]
     #df_fundamentals = anes[anes['year']<2016]
-    summary_fundamentals = {'accuracy': '', 'params': '', 'error_df': dict()}
+    if MULTI_PARTY_MODE:
+        col_names = ['Year', 'Accuracy', 'Republican pred vote', 'Democratic pred vote', 'Republican vote (survey)', 'Republican vote (actual)']
+        summary_fundamentals = {'accuracy': '', 'params': '', 'error_df': dict(), 'colnames': col_names}
+    else:
+        col_names = ['Year', 'Accuracy', 'Republican pred vote', 'Republican vote (survey)', 'Republican vote (actual)']
+        summary_fundamentals = {'accuracy': '', 'params': '', 'error_df': dict(), 'colnames': col_names}
+
     #various possible predictors
     #str_fundamentals = 'vote ~ diff_diff + inflation_yoy + rdi_yr_to_election + unemployment + lean_prev2 + hlean_prev2 + age + education + gender + inc_party_cand_approval'
     #most parsimonious combination of two variables
@@ -659,15 +666,24 @@ else:
         default['df_fundamentals'] = df_fundamentals
         summary_fundamentals = append_accuracy_multi(df_fundamentals, summary_fundamentals, default)
     else:
-        df_fundamentals, model_fundamentals = create_model_fundamentals(df_fundamentals, str_fundamentals)
+        df_fundamentals, model_fundamentals = create_model_fundamentals(df_fundamentals, str_fundamentals, default)
         default['df_fundamentals'] = df_fundamentals
-        summary_fundamentals = append_accuracy(df_fundamentals, summary_fundamentals)
-        summary_fundamentals = append_params(model_fundamentals, summary_fundamentals)
+        summary_fundamentals = append_accuracy(df_fundamentals, summary_fundamentals, default)
+        summary_fundamentals = append_params(model_fundamentals, summary_fundamentals, default)
 
-    summary_fundamentals_moving = {'accuracy': '', 'error_df': dict()} #predict accuracy of fundamentals regression for each election 1972-2012
-    summary_demographics = {'accuracy': '', 'params': '', 'error_df': dict()}
-    summary_combined = {'accuracy': '', 'params': '', 'error_df': dict()}
+    if MULTI_PARTY_MODE:
+        #predict accuracy of fundamentals regression for each election 1972-2012
+        summary_fundamentals_moving = {'accuracy': '', 'error_df': dict(), 'colnames': col_names} 
+        summary_demographics = {'accuracy': '', 'params': '', 'error_df': dict(), 'colnames': col_names}
+        summary_combined = {'accuracy': '', 'params': '', 'error_df': dict(), 'colnames': col_names}
+    else:
+        summary_fundamentals_moving = {'accuracy': '', 'error_df': dict(), 'colnames': col_names} 
+        summary_demographics = {'accuracy': '', 'params': '', 'error_df': dict(), 'colnames': col_names}
+        summary_combined = {'accuracy': '', 'params': '', 'error_df': dict(), 'colnames': col_names}
+
     #range starts at 1976 because there is no ideology data before 1972
+    #df_fundamentals_moving_concat = pd.DataFrame()
+    df_averaged_concat = pd.DataFrame()
     for default['year'] in range(1972,2024,4):
         df_fundamentals_temp = df_fundamentals
         #For each election, create fundamentals regression while excluding current election
@@ -715,8 +731,8 @@ else:
             else:
                 df_demographics['pred_vote_prob'] = model_demographics.predict(df_demographics)
                 df_demographics = predict_vote(df_demographics)
-                summary_demographics = append_accuracy(df_demographics, summary_demographics)
-                summary_demographics = append_params(model_demographics, summary_demographics)
+                summary_demographics = append_accuracy(df_demographics, summary_demographics, default)
+                summary_demographics = append_params(model_demographics, summary_demographics, default)
 
             #to compute average between fundamentals model and demographics model
             if (df_fundamentals_subs.keys() == df_demographics.keys()).all() and len(df_fundamentals_subs) == len(df_demographics):
@@ -738,13 +754,16 @@ else:
                     df_averaged = df_fundamentals_subs.copy()
                     df_averaged['pred_vote_prob'] = (df_fundamentals_subs['pred_vote_prob'] + df_demographics['pred_vote_prob']) /2
                     df_averaged = predict_vote(df_averaged)
-                    summary_combined = append_accuracy(df_averaged, summary_combined)#no summary demographics
+                    summary_combined = append_accuracy(df_averaged, summary_combined, default)#no summary demographics
 
                     #use prediction fit to entire dataset 1972-2012 to each election in this period
                     df_fundamentals_moving = df_fundamentals_subs.copy()
                     df_fundamentals_moving['pred_vote_prob'] = model_fundamentals.predict(df_fundamentals_moving)
                     df_fundamentals_moving = predict_vote(df_fundamentals_moving)
-                    summary_fundamentals_moving = append_accuracy(df_fundamentals_moving, summary_fundamentals_moving)
+                    summary_fundamentals_moving = append_accuracy(df_fundamentals_moving, summary_fundamentals_moving, default)
+                
+                df_averaged_concat = pd.concat([df_averaged_concat, df_averaged])
+                #df_fundamentals_moving_concat = pd.concat([df_fundamentals_moving_concat, df_fundamentals_moving])
                 
             else:
                 print('Error: Could not compute average of fundamentals and demographic models. Dataframes have differing length.')
@@ -757,9 +776,16 @@ else:
     if MULTI_PARTY_MODE:
         for party in PARTIES:
             model_fundamentals_dict[party].save(f'{REGRESSION_OBJ_PATH}/{party}_model_fundamentals.pickle')
+        df_averaged_concat.to_csv('out/model_predictions_multi.csv')
     else:
         model_fundamentals.save(f'{REGRESSION_OBJ_PATH}/model_fundamentals.pickle')
-    
+        df_averaged_concat.to_csv('out/model_predictions_2party.csv')
+
+    #Accuracy of the model that predicts vote choice as a function of economic parameters
+    #and the respondent's ideology, known as the fundamentals model.
+    ###########################
+    ###SINGLE-MODEL ACCURACY###
+    ###########################
     title = '1972-2020 Fundamentals Model Accuracy'
     print_accuracy(summary_fundamentals, title)
     #title = '1972-2012 Fundamentals Model Parameters'
@@ -767,6 +793,7 @@ else:
     title = 'Time Series Fundamentals Model Accuracy By Election'
     print_accuracy(summary_fundamentals_moving, title)
     print_abs_error(summary_fundamentals_moving)
+    
     if MULTI_PARTY_MODE:
         print('Covariates: ' + str_fundamentals_dict['dem'] + '\n')
     else:
@@ -776,9 +803,16 @@ else:
     #title = 'Local Demographics Model Parameters'
     #print_params(model_demographics, summary_demographics, title)
 
-    #title = '1972-2020 Averaged Model Parameters'
-    #print_accuracy(summary_combined, title)
-    #print_abs_error(summary_combined)
+    #Here, the prediction of the fundamentals model is averaged with the 
+    #prediction of a model fitted to each election. This model is called the demographics
+    #model and predicts vote choice in a single election as a function of demographics. 
+    #The accuracy of the averaged prediction is reported for every election.
+    ################################
+    ###TWO-MODEL-AVERAGE ACCURACY###
+    ################################
+    title = '1972-2020 Averaged Model Parameters'
+    print_accuracy(summary_combined, title)
+    print_abs_error(summary_combined)
     #if MULTI_PARTY_MODE:
     #    print('Covariates (Election Specific Model): ' + str_demographics_dict['dem'])
     #    print('Covariates (Time-Series): ' + str_fundamentals_dict['dem'] + '\n')
