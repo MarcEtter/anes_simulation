@@ -62,6 +62,15 @@ if os.path.exists(path):
 else:
     print('Error: File "regress_data.csv" not found.')
 
+def write_regress_data_clean():
+    keys = default['mult_in_dir_of_incumbency'] + ['year','state','inc_party','dem_share','berry_citizen']
+    regress_data = pd.read_csv('model_data/regression_data_altered.csv')[keys]
+    new_keys = [f'dem_{x}' for x in default['mult_in_dir_of_incumbency']]
+    extant_keys = default['mult_in_dir_of_incumbency']
+    regress_data[new_keys] = regress_data[extant_keys].apply(lambda x: x*(regress_data['inc_party']*2 - 1), axis = 0)
+
+    regress_data.to_csv('model_data/regression_data_clean.csv')
+
 def get_vars_to_norm(PARTIES):
     vars_to_normalize = ['age',
                     'lean_prev',
@@ -275,6 +284,7 @@ def add_party_codes_votes(election):
         df[f'{party}_vote'] = df[f'{party}_vote'].apply(lambda x: 1 if x==True else 0)
     return df
 
+#multiply covariates that affect the incumbent in the direction of the incumbency
 def add_party_vars(election):
     vars = election['mult_in_dir_of_incumbency']
     df = election['df']
@@ -644,7 +654,8 @@ else:
     #most parsimonious combination of two variables
 
     ##****************REGRESSION FOR DUAL-PARTY MODE, FITTED TO ENTIRE DATASET****************
-    str_fundamentals = 'vote ~ diff_diff + inc_party_cand_approval'
+    #str_fundamentals = 'vote ~ diff_diff + inc_party_cand_approval'
+    str_fundamentals = 'vote ~ diff_diff + inflation_yoy + rdi_yr_to_election + inc_tenure'
     str_fundamentals_dict = {}
     model_fundamentals_dict = {}
     for party in PARTIES:
@@ -709,7 +720,10 @@ else:
         convergence = False
         try:
             if MODEL == 'logit' and not MULTI_PARTY_MODE:
-                model_demographics = smf.logit(str_demographics, data = df_demographics).fit()
+                try:
+                    model_demographics = smf.logit(str_demographics, data = df_demographics).fit()
+                except np.linalg.LinAlgError:#race throws an error in 1988 for some reason
+                    model_demographics = smf.logit('vote ~ diff_diff + age + education', data = df_demographics).fit()
             elif MODEL == 'ols' and not MULTI_PARTY_MODE:
                 model_demographics = smf.ols(str_demographics, data = df_demographics).fit()
             elif MODEL == 'logit':
@@ -761,7 +775,7 @@ else:
                     df_fundamentals_moving['pred_vote_prob'] = model_fundamentals.predict(df_fundamentals_moving)
                     df_fundamentals_moving = predict_vote(df_fundamentals_moving)
                     summary_fundamentals_moving = append_accuracy(df_fundamentals_moving, summary_fundamentals_moving, default)
-                
+
                 df_averaged_concat = pd.concat([df_averaged_concat, df_averaged])
                 #df_fundamentals_moving_concat = pd.concat([df_fundamentals_moving_concat, df_fundamentals_moving])
                 
