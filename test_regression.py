@@ -9,6 +9,7 @@ import os
 from code_to_category import *
 from rake import *
 import re #for format string parsing
+from pymer4.models import Lmer
 pd.options.mode.chained_assignment = None  # default='warn' #silence setting on copy of pandas slice warning
 
 YEAR_WIDTH = 6
@@ -182,6 +183,11 @@ def linear_interpolate(fun, x, series):
     return (y_2 - y_1) / (x_2 - x_1) * (x_2 - x) + y_1
 
 def rake_state(year, fips, election_df, rake_keys):
+    state_code = fips_to_state_postal_codes[fips]
+    election_df['region'] = state_name_to_region[state_code]
+    election_df['state'] = state_code
+    election_df['pol_south'] = int(state_code in pol_south)
+
     #return dictionary containing marginal probabilities of categories in each categorical variable
     target_marginal_probs = {}
     for key in rake_keys:
@@ -260,7 +266,17 @@ def rake(sample, target_marginal_probs, rake_keys):
             f'Marginal probability correlation: {corr :<1.4f}')
 
     return sample_convert
-    
+
+def predict_small_area_multi(election_df, model):
+    pass #TODO: implement this
+
+def predict_small_area(election_df, model):
+    #In the raking step, variables are recoded to match with the census
+    #However, these recoded variables are not necessary to make predictions 
+    #so make sure that you are passing in a dataframe without recoded variables
+    election_df['pred_vote_prob_sae'] = model.predict(election_df)
+    return election_df
+
 def compute_distances(election):
     df = election['df']
     PARTIES = election['parties']
@@ -498,7 +514,14 @@ def create_model_fundamentals_multi(df_fundamentals, str_fundamentals_dict, elec
 def create_model_fundamentals(df_fundamentals, str_fundamentals, election):
     MODEL = election['model']
     if MODEL == 'logit':
-        model_fundamentals = smf.logit(str_fundamentals, data = df_fundamentals).fit()
+        #model_fundamentals = smf.logit(str_fundamentals, data = df_fundamentals).fit()
+        #model_fundamentals = smf.mixedlm(str_fundamentals, data = df_fundamentals, 
+        #                                 groups=df_fundamentals["year"],
+        #                                 re_formula='race + education + age + race:year + education:year + age:year').fit()
+        model_fundamentals = smf.mixedlm(str_fundamentals, data = df_fundamentals, 
+                                         groups = df_fundamentals['year']).fit()
+        #model_fundamentals = Lmer(str_fundamentals, 
+        #                          data=df_fundamentals, family="binomial").fit(n_jobs = 4, verbose = True)
     elif MODEL == 'ols':
         model_fundamentals = smf.ols(str_fundamentals, data = df_fundamentals).fit()
     df_fundamentals['pred_vote_prob'] = model_fundamentals.predict(df_fundamentals)
@@ -601,6 +624,9 @@ else:
     anes = anes[anes['vote'] != 3]
 
     anes['state'] = anes['fips'].apply(lambda x: code_to_category(x,state_name))
+    anes['pol_south'] = anes['state'].apply(lambda x: 1 if x in pol_south else 0)
+    anes['state_code'] = anes['fips'].apply(lambda x: fips_to_state_postal_codes[x])
+    anes['region'] = anes['state_code'].apply(lambda x: state_name_to_region[x])
     anes['education'] = anes['education'].apply(lambda x: code_to_category(x,educ_category))
     anes['race'] = anes['race'].apply(lambda x: code_to_category(x,race_category))
     #note: if using cohen/mcgrath spliced_BPHI figures, add 3.5; they are normalized with the political center as zero
@@ -639,7 +665,6 @@ else:
             anes[var] = anes[var] * (anes['incumbency']*2 - 1)
     anes = anes.fillna(0)#nan variables are filled with zeroes, BUT ONLY AFTER NORMALIZING
 
-
     df_fundamentals = anes[anes['year']>1968]
     #df_fundamentals = anes[anes['year']<2016]
     if MULTI_PARTY_MODE:
@@ -655,7 +680,10 @@ else:
 
     ##****************REGRESSION FOR DUAL-PARTY MODE, FITTED TO ENTIRE DATASET****************
     #str_fundamentals = 'vote ~ diff_diff + inc_party_cand_approval'
-    str_fundamentals = 'vote ~ diff_diff + inflation_yoy + rdi_yr_to_election + inc_tenure'
+    #str_fundamentals = 'vote ~ diff_diff + inflation_yoy + rdi_yr_to_election + inc_tenure + region + pol_south'
+    #str_fundamentals += ' + education + race + (1 | education*year) + (1 |)'
+    #str_fundamentals = 'vote ~ diff_diff + inflation_yoy + rdi_yr_to_election + education + race + gender + (race | year) + (gender | year)'
+    str_fundamentals = 'vote ~ diff_diff + inflation_yoy + rdi_yr_to_election + inc_tenure + age + education + race + region'
     str_fundamentals_dict = {}
     model_fundamentals_dict = {}
     for party in PARTIES:
@@ -824,9 +852,9 @@ else:
     ################################
     ###TWO-MODEL-AVERAGE ACCURACY###
     ################################
-    title = '1972-2020 Averaged Model Parameters'
-    print_accuracy(summary_combined, title)
-    print_abs_error(summary_combined)
+    #title = '1972-2020 Averaged Model Parameters'
+    #print_accuracy(summary_combined, title)
+    #print_abs_error(summary_combined)
     #if MULTI_PARTY_MODE:
     #    print('Covariates (Election Specific Model): ' + str_demographics_dict['dem'])
     #    print('Covariates (Time-Series): ' + str_fundamentals_dict['dem'] + '\n')

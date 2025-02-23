@@ -6,6 +6,8 @@ import numpy as np
 #write_regress_data_clean()
 regress_data = pd.read_csv('model_data/regression_data_clean.csv')
 regress_data = regress_data.set_index(['year','state'], drop = False)
+model_fundamentals = load_model_fundamentals('regression_models')
+dem_key, gop_key = census_keys['vote'][0], census_keys['vote'][1]
 
 #Tests the accuracy of vote predictions at the state level by comparing vote intention
 #in the re-weighted state samples to the actual vote intention. Accuracy is reported
@@ -21,7 +23,8 @@ def predict(yr):
     #df_yr = pd.read_csv('model_data/simulation_data.csv')
     df_yr = pd.read_csv('out/model_predictions_2party.csv')
     df_yr = df_yr[df_yr['year'] == yr]
-    rake_keys = list(census_keys.keys())[:-1]
+    #eliminate last key because income is not included in the model
+    rake_keys = list(census_keys.keys())[:-1] 
     state_weights = pd.DataFrame()
 
     #Find weights of each respondent within state by raking
@@ -32,6 +35,7 @@ def predict(yr):
     for state in state_postal_codes:
         fips = code_to_fips[state]
         state_df[state] = rake_state(yr, fips, df_yr, rake_keys)
+        state_df[state]['pred_vote_prob_sae'] = predict_small_area(df_yr, model_fundamentals)['pred_vote_prob_sae']
         #print(f'raked ({yr},{state})')
         df = state_df[state] 
 
@@ -55,8 +59,6 @@ def predict(yr):
     quotient_vect = df_yr['weight1'] / natl_weights
     state_weights = state_weights.apply(lambda x: quotient_vect*x)
     adj_natl_weights = state_weights.mean(axis = 'columns')    
-
-    dem_key, gop_key = census_keys['vote'][0], census_keys['vote'][1]
 
     sample_convert = pd.DataFrame(df_yr[rake_keys + ['weight1', 'pred_vote_prob']])
     for key in mapping.keys():#covert all columns that have mappings to census variables
@@ -84,10 +86,10 @@ def predict(yr):
         
         #uncomment below line if using old reweighting procedure based on setting sum of state weights equal to national weights
         #
-        adj_share = np.sum(df['pred_vote_prob'] * df['weight_adj']) / df['weight_adj'].sum()
+        adj_share = np.sum(df['pred_vote_prob_sae'] * df['weight_adj']) / df['weight_adj'].sum()
         #adj_share = np.sum(df['pred_vote_prob'] * df['weight1']) / np.sum(df['weight1'])
         adj_share = pd.Series({dem_key: 1-adj_share, gop_key: adj_share})
-        unadj_share =  np.sum(df['pred_vote_prob'] * df['weight1']) / df['weight1'].sum()
+        unadj_share =  np.sum(df['pred_vote_prob_sae'] * df['weight1']) / df['weight1'].sum()
         unadj_share = pd.Series({f'unadj_{dem_key}': 1-unadj_share, f'unadj_{gop_key}': unadj_share})
 
         state_target_marginals[state] = pd.concat([adj_share, unadj_share])
@@ -129,8 +131,7 @@ def predict(yr):
     unadj_mae = np.mean(abs(joined['dem_share'] - joined[f'unadj_{dem_key}']))
     corr = np.corrcoef(joined['dem_share'], joined[dem_key])[0,1]
     unadj_corr = np.corrcoef(joined['dem_share'], joined[f'unadj_{dem_key}'])[0,1]
-    print(f'{yr} ~ Adjusted Mean Avg Error: {mae :<1.3f}, Unadjusted: {unadj_mae:<1.3f}' +
-          f', OLS: {model_mae :<1.3f}')
+    print(f'{yr :^5}{mae :^20.3f}{unadj_mae:^20.3f}{model_mae:^20.3f}')
     
     joined['correct'] = (np.round(joined['dem_share']) == np.round(joined[dem_key])).astype(int)
     joined['unadj_correct'] = (np.round(joined['dem_share']) == np.round(joined[f'unadj_{dem_key}'])).astype(int)
@@ -138,12 +139,31 @@ def predict(yr):
 
     return joined[['year','state',dem_key,f'unadj_{dem_key}',
                    'OLS','dem_share','correct','unadj_correct','OLS_correct']]
-    
-#def predict_small_area(election, areas):
 
+print(f'\n{"State Level Predictions" :^35}\n')
 state_votes = pd.DataFrame()
-for yr in range(1972,2004,4):
+yr_range = range(1972,2004,4)
+print(f'{"Year":^5}{"Adj MAE":^20}{"Unadj MAE":^20}{"OLS MAE":^20}')
+for yr in yr_range:
     state_votes = pd.concat([state_votes, predict(yr)], axis = 'rows')
+
+print(f'\n{"" :^25}\n')
+print(f'{"Year":^5}{"Adj Accuracy":^20}{"Unadj Accuracy":^20}{"OLS Accuracy":^20}')
+for yr in yr_range:
+    adj_accuracy = state_votes[state_votes['year'] == yr]['correct'].agg('mean')
+    unadj_accuracy = state_votes[state_votes['year'] == yr]['unadj_correct'].agg('mean')
+    ols_accuracy = state_votes[state_votes['year'] == yr]['OLS_correct'].agg('mean')
+    print(f'{yr :^5}{adj_accuracy:^20.3f}{unadj_accuracy:^20.3f}{ols_accuracy:^20.3f}')
+
+adj_accuracy = np.mean(state_votes['correct'])
+unadj_accuracy = np.mean(state_votes['unadj_correct'])
+ols_accuracy = np.mean(state_votes['OLS_correct'])
+print(f'{"All" :^5}{adj_accuracy:^20.3f}{unadj_accuracy:^20.3f}{ols_accuracy:^20.3f}')
+
+adj_mae = np.mean(abs(state_votes[dem_key] - state_votes['dem_share']))
+unadj_mae = np.mean(abs(state_votes[f'unadj_{dem_key}'] - state_votes['dem_share']))
+ols_mae = np.mean(abs(state_votes['OLS'] - state_votes['dem_share']))
+print(f'{"All" :^5}{adj_mae:^20.3f}{unadj_mae:^20.3f}{ols_mae:^20.3f}')
 
 state_votes.to_csv('out/test_state_votes.csv')
 
