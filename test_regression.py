@@ -9,12 +9,12 @@ import os
 from code_to_category import *
 from rake import *
 import re #for format string parsing
-from pymer4.models import Lmer
 pd.options.mode.chained_assignment = None  # default='warn' #silence setting on copy of pandas slice warning
+import statsmodels.genmod.bayes_mixed_glm as smgb
 
 YEAR_WIDTH = 6
 FIELD_WIDTH = 15
-RUN_REGRESSIONS = False
+RUN_REGRESSIONS = True
 EXCLUDE_CURR_YR = False #for measuring the out-of-sample accuracy
 REGRESSION_OBJ_PATH = os.getcwd() + '/regression_models'
 DEFAULT_REGR = f'{REGRESSION_OBJ_PATH}/dem_model_fundamentals.pickle'
@@ -26,7 +26,9 @@ PRINT_RAKING = False
 default = {}
 default['party_codes'] = {'dem':0, 'gop':1}
 default['parties'] = list(default['party_codes'].keys())
-default['model'] = 'logit'
+#setting model to 'mixedlm' uses mixedlm for the time-series model
+#(fundamentals) and 'logit' for the election_specific model (demographics)
+default['model'] = 'mixedlm' 
 default['year'] = 1948
 default['multi_party_mode'] = False
 default['normalize'] = NORMALIZE
@@ -186,6 +188,8 @@ def rake_state(year, fips, election_df, rake_keys):
     state_code = fips_to_state_postal_codes[fips]
     election_df['region'] = state_name_to_region[state_code]
     election_df['state'] = state_code
+    election_df['lean_prev2'] = regress_data.loc[(year, state_code), 'lean_prev2']
+    election_df['hlean_prev2'] = regress_data.loc[(year, state_code), 'hlean_prev2']
     election_df['pol_south'] = int(state_code in pol_south)
 
     #return dictionary containing marginal probabilities of categories in each categorical variable
@@ -500,6 +504,9 @@ def print_abs_error(summary):
 def create_model_fundamentals_multi(df_fundamentals, str_fundamentals_dict, election):
     model = election['model']
     for party in PARTIES:
+        if model == 'mixedlm':
+            model_fundamentals = smf.mixedlm(str_fundamentals, data = df_fundamentals, 
+                                             groups = df_fundamentals['region_year']).fit()
         if model == 'logit':
             model_fundamentals_dict[party] = smf.logit(str_fundamentals_dict[party], data = df_fundamentals).fit()
         elif model == 'ols':
@@ -513,17 +520,32 @@ def create_model_fundamentals_multi(df_fundamentals, str_fundamentals_dict, elec
 
 def create_model_fundamentals(df_fundamentals, str_fundamentals, election):
     MODEL = election['model']
-    if MODEL == 'logit':
+    if MODEL == 'mixedlm':
+        model_fundamentals = smf.mixedlm(str_fundamentals, data = df_fundamentals, 
+                                        groups = df_fundamentals['region_year']).fit()
+        
+        #model_fundamentals = smf.logit(str_fundamentals, data=df_fundamentals).fit()
+
+        #r = {'diff_diff': '0 + C(diff_diff)',
+        #     'race' : '0 + C(race)',
+        #     'age' : '0 + C(age)',
+        #     'education' : '0 + C(education)',}
+        #model_fundamentals = smgb.BinomialBayesMixedGLM.from_formula(formula = str_fundamentals, 
+        #                                                             vc_formulas = r,
+        #                                                               data = df_fundamentals).fit_map()
+        
         #model_fundamentals = smf.logit(str_fundamentals, data = df_fundamentals).fit()
         #model_fundamentals = smf.mixedlm(str_fundamentals, data = df_fundamentals, 
         #                                 groups=df_fundamentals["year"],
         #                                 re_formula='race + education + age + race:year + education:year + age:year').fit()
-        model_fundamentals = smf.mixedlm(str_fundamentals, data = df_fundamentals, 
-                                         groups = df_fundamentals['year']).fit()
+        
         #model_fundamentals = Lmer(str_fundamentals, 
         #                          data=df_fundamentals, family="binomial").fit(n_jobs = 4, verbose = True)
+    elif MODEL == 'logit':
+        model_fundamentals = smf.logit(str_fundamentals, data = df_fundamentals).fit()
     elif MODEL == 'ols':
         model_fundamentals = smf.ols(str_fundamentals, data = df_fundamentals).fit()
+
     df_fundamentals['pred_vote_prob'] = model_fundamentals.predict(df_fundamentals)
     df_fundamentals = predict_vote(df_fundamentals)
     return df_fundamentals, model_fundamentals
@@ -614,19 +636,27 @@ else:
     #reset index so that we may retreive republican two party national pop. vote shares for each election
     regress_data = regress_data.set_index(['year','state'])
     #regress_data.to_csv('model_data/regress_data.csv')
-
+    
+    ##PREVIOUS DATA CLEANING APPROACH
     anes = anes[(anes['year'] % 4 == 0)]
-    # delete all rows with zeroes indicating missing data
+    ## delete all rows with zeroes indicating missing data
     anes = anes[(anes[:] != 0 ).all(axis=1)]
-    # drop 'neither' responses for gender (only for 2016)
+    ## drop 'neither' responses for gender (only for 2016)
     anes = anes[anes['gender'] != 3] 
     anes = anes[anes['ideology'] != 9]
     anes = anes[anes['vote'] != 3]
+
+    ##ALTERNATIVE APPROACH
+    #anes = anes[anes['vote'] != 0]
+    #anes = anes[anes['vote'] != 3]
+    #anes = anes[anes['ideology'] != 0]
+    #anes = anes[anes['ideology'] != 9]
 
     anes['state'] = anes['fips'].apply(lambda x: code_to_category(x,state_name))
     anes['pol_south'] = anes['state'].apply(lambda x: 1 if x in pol_south else 0)
     anes['state_code'] = anes['fips'].apply(lambda x: fips_to_state_postal_codes[x])
     anes['region'] = anes['state_code'].apply(lambda x: state_name_to_region[x])
+    anes['region_year'] = (anes['region'] + anes['year'].astype('string')).astype('O')
     anes['education'] = anes['education'].apply(lambda x: code_to_category(x,educ_category))
     anes['race'] = anes['race'].apply(lambda x: code_to_category(x,race_category))
     #note: if using cohen/mcgrath spliced_BPHI figures, add 3.5; they are normalized with the political center as zero
@@ -683,7 +713,7 @@ else:
     #str_fundamentals = 'vote ~ diff_diff + inflation_yoy + rdi_yr_to_election + inc_tenure + region + pol_south'
     #str_fundamentals += ' + education + race + (1 | education*year) + (1 |)'
     #str_fundamentals = 'vote ~ diff_diff + inflation_yoy + rdi_yr_to_election + education + race + gender + (race | year) + (gender | year)'
-    str_fundamentals = 'vote ~ diff_diff + inflation_yoy + rdi_yr_to_election + inc_tenure + age + education + race + region'
+    str_fundamentals = 'vote ~ diff_diff + inflation_yoy + rdi_yr_to_election + inc_tenure + age + education + race + region' 
     str_fundamentals_dict = {}
     model_fundamentals_dict = {}
     for party in PARTIES:
@@ -694,8 +724,9 @@ else:
         #str_fundamentals_dict[party] = f'{party}_vote ~ {party}_diff + {party}_inc_party_cand_approval + {party}_inc_tenure + {party}_rdi_yr_to_election + {party}_inflation_yoy'
         #str_fundamentals_dict[party] += f'+ race + education + gender + family_income'
         #str_fundamentals_dict[party] = f'{party}_vote ~ {party}_poll'
+        str_fundamentals_dict[party] = f'{party}_vote ~ {party}_diff + {party}_inflation_yoy + {party}_inc_tenure + age + education + race + region'
         #REGRESSION BASED ONLY ON IDEOLOGY
-        str_fundamentals_dict[party] = f'{party}_vote ~ {party}_diff'
+        #str_fundamentals_dict[party] = f'{party}_vote ~ {party}_diff'
     #most of the features from the model used to predict the incumbent's state vote share, plus unemployment
     #str_fundamentals = 'vote ~ diff_diff + rdi_yr_to_election + unemployment + lean_prev + lean_prev2 + hlean_prev + hlean_prev2 + inc_party_cand_approval + inflation_yoy + inc_tenure' 
     
@@ -747,11 +778,22 @@ else:
                 str_demographics_dict[party] = f'vote ~ {party}_diff + age + education + race'
         convergence = False
         try:
-            if MODEL == 'logit' and not MULTI_PARTY_MODE:
-                try:
-                    model_demographics = smf.logit(str_demographics, data = df_demographics).fit()
-                except np.linalg.LinAlgError:#race throws an error in 1988 for some reason
-                    model_demographics = smf.logit('vote ~ diff_diff + age + education', data = df_demographics).fit()
+            if MODEL == 'logit' or MODEL == 'mixedlm' and not MULTI_PARTY_MODE:
+                while True:
+                    try:
+                        model_demographics = smf.logit(str_demographics, data = df_demographics).fit()
+                        break
+                    except np.linalg.LinAlgError:#race throws an error in 1988 for some reason
+                        pass
+                    try: 
+                        model_demographics = smf.logit('vote ~ diff_diff + age + education', data = df_demographics).fit()
+                        break
+                    except np.linalg.LinAlgError:
+                        pass
+
+                    model_demographics = smf.logit('vote ~ diff_diff + age', data = df_demographics).fit()
+                    break
+
             elif MODEL == 'ols' and not MULTI_PARTY_MODE:
                 model_demographics = smf.ols(str_demographics, data = df_demographics).fit()
             elif MODEL == 'logit':
@@ -821,7 +863,8 @@ else:
         df_averaged_concat.to_csv('out/model_predictions_multi.csv')
     else:
         model_fundamentals.save(f'{REGRESSION_OBJ_PATH}/model_fundamentals.pickle')
-        df_averaged_concat.to_csv('out/model_predictions_2party.csv')
+        df_fundamentals.to_csv('out/model_predictions_2party.csv')
+        df_averaged_concat.to_csv('out/model_predictions_2party_2model.csv')
 
     #Accuracy of the model that predicts vote choice as a function of economic parameters
     #and the respondent's ideology, known as the fundamentals model.

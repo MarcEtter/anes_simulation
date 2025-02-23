@@ -183,6 +183,7 @@ code_to_fips = {
          }
 
 fips_to_state_postal_codes = {
+    0: 'Inap.', #inappicable
     1: 'AL', 
     2: 'AK', 
     4: 'AZ', 
@@ -293,6 +294,7 @@ state_postal_codes = [
 
 #map state names to seven US Regions
 state_name_to_region = {
+    'Inap.': 'Inap.',
     'AL': 'South',
     'AK': 'Alaska',
     'AZ': 'West',
