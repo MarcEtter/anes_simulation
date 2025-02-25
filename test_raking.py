@@ -6,6 +6,8 @@ import time
 
 #write_regress_data_clean()
 regress_data = pd.read_csv('model_data/regression_data_clean.csv')
+ols = pd.read_csv('model_data/OLS_predictions.csv')
+ols = ols.set_index(['year','state'], drop = False)
 regress_data = regress_data.set_index(['year','state'], drop = False)
 model_fundamentals = load_model_fundamentals('regression_models')
 dem_key, gop_key = census_keys['vote'][0], census_keys['vote'][1]
@@ -29,7 +31,8 @@ def predict(yr):
     df_yr = pd.read_csv('out/model_predictions_2party_2model.csv')
     df_yr = df_yr[df_yr['year'] == yr]
     #eliminate last key because income is not included in the model
-    rake_keys = list(census_keys.keys())[:-1] 
+    #rake_keys = list(census_keys.keys())[:-1] 
+    rake_keys = ['vote']
     state_weights = pd.DataFrame()
 
     #Find weights of each respondent within state by raking
@@ -121,16 +124,11 @@ def predict(yr):
     #for state in state_postal_codes:
     #    target_marginal_probs[dem_key]   
 
-    subs = regress_data[regress_data['year'] == yr]
-    train = (regress_data[regress_data['year'] != yr])[['dem_share', 'lean_prev2', 'dem_inflation_yoy', 
-                                                        'dem_rdi_yr_to_election','inc_party','dem_inc_tenure',
-                                                        'berry_citizen']]
-    linear_model = smf.ols('dem_share ~ lean_prev2 + dem_inflation_yoy + dem_rdi_yr_to_election + inc_party + dem_inc_tenure + berry_citizen', 
-                           data = train).fit()
-    subs['predict'] = linear_model.predict(subs)
-    model_rsquared = linear_model.rsquared**0.5
-    model_mae = np.mean(abs(subs['dem_share'] - subs['predict']))
-    regress_data['OLS'] = subs['predict']
+
+    subs = ols[ols['year'] == yr]
+    model_rsquared = np.corrcoef(subs['dem_share'], subs['ols_pred_dem_vote'])[0,1]
+    model_mae = np.mean(abs(subs['dem_share'] - subs['ols_pred_dem_vote']))
+    regress_data['OLS'] = subs['ols_pred_dem_vote']
 
     joined = regress_data.loc[yr].join(state_votes[[dem_key,f'unadj_{dem_key}']], how = 'inner')
     mae = np.mean(abs(joined['dem_share'] - joined[dem_key]))
@@ -149,9 +147,8 @@ def predict(yr):
 start = time.time()
 print(f'\n{"State Vote Predictions Mean Average Error" :^69}\n')
 state_votes = pd.DataFrame()
-yr_range = range(1972,2004,4)
 print(f'|{"Year":^5}|{"Adj MAE":^20}|{"Unadj MAE":^20}|{"OLS MAE":^20}|')
-for yr in yr_range:
+for yr in raking_yr_range:
     state_votes = pd.concat([state_votes, predict(yr)], axis = 'rows')
 adj_mae = np.mean(abs(state_votes[dem_key] - state_votes['dem_share']))
 unadj_mae = np.mean(abs(state_votes[f'unadj_{dem_key}'] - state_votes['dem_share']))
@@ -160,7 +157,7 @@ print(f'|{"All" :^5}|{adj_mae:^20.2%}|{unadj_mae:^20.2%}|{ols_mae:^20.2%}|')
 
 print(f'\n{"Proportion of States Called Correctly" :^69}\n')
 print(f'|{"Year":^5}|{"Adj Accuracy":^20}|{"Unadj Accuracy":^20}|{"OLS Accuracy":^20}|')
-for yr in yr_range:
+for yr in raking_yr_range:
     adj_accuracy = state_votes[state_votes['year'] == yr]['correct'].agg('mean')
     unadj_accuracy = state_votes[state_votes['year'] == yr]['unadj_correct'].agg('mean')
     ols_accuracy = state_votes[state_votes['year'] == yr]['OLS_correct'].agg('mean')

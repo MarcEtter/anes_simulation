@@ -1,10 +1,31 @@
 import pandas as pd
+import statsmodels.formula.api as smf
+from code_to_category import *
 
-states = pd.read_csv('model_data/state_demographics.csv')
-states = states.set_index(['year','fips'], drop = False)
-#states = states.sort_index(level = ['year','fips'])
-anes_family_income = pd.read_csv('model_data/anes_income_percentiles.csv').set_index('year')
-anes_family_income = anes_family_income.drop(columns=['17','34','68','96'])
+def fit_ols_model():
+    predictions = pd.DataFrame()
+    regress_data = pd.read_csv('model_data/regression_data_clean.csv')
+    states = pd.read_csv('model_data/state_demographics.csv')
+    for yr in raking_yr_range:#Exclude current year for cross-validation
+        subs = regress_data[regress_data['year'] == yr]
+        train = (regress_data[regress_data['year'] != yr])[['year','state','dem_share', 'lean_prev2', 'lean_prev',
+                                                            'hlean_prev', 'hlean_prev2', 'dem_inflation_yoy', 
+                                                            'dem_rdi_yr_to_election','inc_party','dem_inc_tenure',
+                                                            'berry_citizen']]
+        regression_str = 'dem_share ~ lean_prev2 + lean_prev + dem_inflation_yoy + dem_rdi_yr_to_election'
+        regression_str += ' + inc_party + dem_inc_tenure + berry_citizen'
+        linear_model = smf.ols(regression_str, data = train).fit()
+        subs['ols_pred_dem_vote'] = linear_model.predict(subs)
+        subs = subs[subs['state'] != 'USA']
+        subs['fips'] = subs['state'].apply(lambda x: code_to_fips[x])
+        subs = subs.set_index('state')
+        subs.loc['DC','ols_pred_dem_vote'] = subs.loc['DC','dem_lean_prev2'] + 0.5
+        subs['ols_pred_gop_vote'] = 1 - subs['ols_pred_dem_vote']
+        predictions = pd.concat([predictions, subs])
+    
+    predictions = predictions.reset_index().drop('Unnamed: 0', axis = 'columns')
+    keys = ['fips','year','state','dem_share','ols_pred_dem_vote','ols_pred_gop_vote']
+    predictions[keys].to_csv('model_data/OLS_predictions.csv')
 
 def read_counties():
     print('Reading county_demographics.csv...')
@@ -12,6 +33,22 @@ def read_counties():
     counties = counties.set_index(['year','fips'], drop = False)
     counties = counties.sort_index(level = ['year','fips'])
     print('Finished reading county_demographics.csv.')
+
+raking_yr_range = range(1972,2004,4)
+states = pd.read_csv('model_data/state_demographics.csv')
+fit_ols_model()
+ols = pd.read_csv('model_data/OLS_predictions.csv').rename({'predict': 'ols_prediction'}, axis = 'columns')
+keys = ['ols_pred_dem_vote','ols_pred_gop_vote']
+ols = ols.set_index(['year','fips'])
+#moving .set_index after the merge caused caused states to become lex unsorted
+#states = states.set_index(['year','fips'], drop = False) 
+#states = states.sort_index(level = ['year','fips'])
+states = states.join(ols[keys], on = ['year','fips'], how = 'left')
+states = states.set_index(['year','fips'], drop = False) 
+#states = states.sort_index(level = ['year','fips'])
+#states = pd.merge(states, ols[keys], on = ['year','fips'], how = 'outer')
+anes_family_income = pd.read_csv('model_data/anes_income_percentiles.csv').set_index('year')
+anes_family_income = anes_family_income.drop(columns=['17','34','68','96'])
 
 #Keys from state level gis data representing variables to be used in the 
 #American National Election studies raking function
@@ -47,8 +84,9 @@ census_keys =  {
     "Families: Income $25,000 to $49,999",
     "Families: Income $50,000 or more"],
 
-    'vote': #['dem_lean2_plus_poll', 'gop_lean2_plus_poll'],
+    'vote': #['ols_pred_dem_vote','ols_pred_gop_vote'],
     ['dem_vote_lean_prev2', 'gop_vote_lean_prev2'],
+    #['dem_lean2_plus_poll', 'gop_lean2_plus_poll'],
     #['dem_vote', 'gop_vote']
 
     #minimum range 0 and maximum range infinity dropped
