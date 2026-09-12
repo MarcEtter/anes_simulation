@@ -1,0 +1,28 @@
+GitHub issues relating to addition of a large file:
+
+If you have added a large file, defined by Github as a file over 100MB in size, Github will not allow you to push to the remote repository. In my case, I was still unable to push even after executing 'git reset HEAD~1' to revert the previous commit.
+To remove the file, I executed: git rm --cached [large file] 
+I was subsequently able to push to the repository.
+
+As a secondary objective, I added changes to a repository without cloning the repository on my computer. I pushed to the repository as follows: 
+git push --set-upstream [repository] main (this command is only necessary after running git init and pushing for the first time)
+Since I did not want to clutter up the main branch with new additions, I created a new branch named 'new_model' and pushed there. So, I executed the following line including the new branch git push --set-upstream [repository] new_model.
+
+Lastly, to delete a branch from cmd, you can run:
+git push [repository url] --delete [branch]
+
+Additional tips:
+To reverse a pull request on git, run:
+git --reset merge ORIG_HEAD
+
+Issues with virtual environments Windows:
+
+1 - When I attempted to initialize a venv virtual environment on Windows, the OS prevented me from doing So
+because running scripts is disabled by default on my system. 
+To enable scripts, run powershell as administrator and execute the following command:
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+This will allow you to execute scripts and initialize the virtual environment.
+
+2 - Restrictions with loading DLL's on Windows - An issue with importing the ordinal model from
+statsmodels was resolved by navigating to Settings > Privacy and Security > Windows Security > Smart App Control 
+and toggling "Enhanced protection" to "off". After restarting my computer, I was able to load the package.
