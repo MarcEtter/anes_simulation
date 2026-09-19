@@ -1,0 +1,4 @@
+# Created by venv; see https://docs.python.org/3/library/venv.html
+
+.venv/*
+raw_data/anes_timeseries_cdf_csv_20260205/*
